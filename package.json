@@ -11,6 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "@atproto/api": "^0.2.11",
+    "axios": "^1.4.0",
     "dotenv": "^16.0.3",
     "node-schedule": "^2.1.1",
     "sqlite": "^4.2.0",
