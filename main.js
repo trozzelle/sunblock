@@ -40,23 +40,6 @@ async function createTable() {
     }
 }
 
-// async function getFollowers(agent, handle) {
-//
-//     let cursorExists = true
-//     let followers = []
-//     try {
-//
-//         while(cursorExists) {
-//
-//         }
-//         const followers = agent.getFollowers({actor:apiUser})
-//
-//         return followers;
-//     } catch (error) {
-//         console.error(`Error in getFollowers: ${error.message}`);
-//     }
-// }
-
 async function getFollowers(agent) {
     let allFollowers = [];
     let nextCursor;
