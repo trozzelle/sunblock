@@ -5,6 +5,7 @@ const {BskyAgent} = bsky;
 import process from "node:process";
 
 import dotenv from 'dotenv';
+import axios from "axios";
 
 dotenv.config();
 
@@ -12,11 +13,13 @@ const apiUser = process.env.ATPROTO_USER
 const apiPassword = process.env.ATPROTO_PASS
 const followLimit = process.env.FOLLOW_LIMIT
 
+const baseUrl = "https://bsky.social"
+
 sqlite3.verbose()
 
 async function authenticateBsky() {
     const agent = new BskyAgent({
-        service: "https://bsky.social",
+        service: baseUrl,
     });
     await agent.login({
         identifier: apiUser,
@@ -69,12 +72,28 @@ async function getFollowing(agent, did) {
 }
 
 async function createBlock(agent, did) {
+
+    const params = {
+        collection: "app.bsky.graph.block",
+        record: {
+            $type: "app.bsky.graph.block",
+            createdAt: new Date().toISOString(),
+            subject: did
+        },
+        repo: agent.session.did
+    }
+
+    const accessToken = agent.session.accessJwt
+
+    const blockEndpoint = baseUrl + "/xrpc/com.atproto.repo.createRecord"
+
     try {
-
-        const block = await agent.mute(did)
-
-        return block.data;
-
+        const response = await axios.post(blockEndpoint, params, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+        return response;
     } catch (error) {
         console.error(`Error in createBlock: ${error.message}`);
     }
@@ -107,7 +126,7 @@ export async function checkAndBlock() {
         }
         const followingCount = await getFollowing(agent, follower.did);
         if (followingCount > followLimit) {
-            console.log(`Muting ${follower.handle} who is following ${followingCount} users.`)
+            console.log(`Blocking ${follower.handle} who is following ${followingCount} users.`)
             await createBlock(agent,follower.did);
             await db.run('UPDATE followers SET handle = ?, following_count = ?, block_status = ?, date_last_updated = ? WHERE did = ?', [ follower.handle, followingCount, 1, new Date().toISOString(), follower.did]);
         }
