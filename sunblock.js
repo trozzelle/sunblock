@@ -80,7 +80,7 @@ async function createBlock(agent, did) {
     }
 }
 
-async function checkAndBlock() {
+export async function checkAndBlock() {
 
     console.log("Starting check and block...")
 
@@ -116,6 +116,8 @@ async function checkAndBlock() {
             await db.run('UPDATE followers SET handle = ?, following_count = ?, date_last_updated = ? WHERE did = ?', [follower.handle, followingCount, new Date().toISOString(), follower.did])
         }
     }
+
+    console.log("Completed run. Exiting.")
 }
 
 checkAndBlock()
