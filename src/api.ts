@@ -1,5 +1,5 @@
-import bsky from "@atproto/api";
-import axios from "axios";
+import bsky, {BskyAgent, AppBskyActorGetProfile, AppBskyGraphBlock, AppBskyGraphGetFollowers, ComAtprotoRepoListRecords} from "@atproto/api";
+import axios, {AxiosResponse} from "axios";
 import process from "node:process";
 import dotenv from 'dotenv';
 const {BskyAgent} = bsky;
@@ -8,11 +8,14 @@ const {BskyAgent} = bsky;
 dotenv.config();
 
 const apiUser = process.env.ATPROTO_USER
-const apiPassword = process.env.ATPROTO_PASS
 
 const baseUrl = "https://bsky.social"
 
-async function authenticateBsky() {
+interface Blocks extends Array<AppBskyGraphBlock.Record>{}
+
+
+
+async function authenticateBsky(): Promise<BskyAgent> {
     const agent = new BskyAgent({
         service: baseUrl,
     });
@@ -30,7 +33,7 @@ async function getFollowers(agent) {
 
     try {
         do {
-            const response = await agent.getFollowers({ actor: apiUser, cursor: nextCursor });
+            const response: AppBskyGraphGetFollowers.Response = await agent.getFollowers({ actor: apiUser, cursor: nextCursor });
             allFollowers = allFollowers.concat(response.data.followers);
             nextCursor = response.data.cursor;
         } while (nextCursor);
@@ -44,7 +47,7 @@ async function getFollowers(agent) {
 async function getFollowingCount(agent, did) {
 
     try {
-        const profile = await agent.getProfile({actor:did})
+        const profile: AppBskyActorGetProfile.Response = await agent.getProfile({actor:did})
 
         return profile.data.followsCount;
     } catch (error) {
@@ -54,18 +57,18 @@ async function getFollowingCount(agent, did) {
 
 async function getBlocks (agent, did) {
 
-    let allBlocks = [];
+    let blocks: Blocks = [];
     let nextCursor;
 
     try {
         do {
-            const response = await agent.com.atproto.repo.listRecords({repo: did, collection: 'app.bsky.graph.block', cursor:nextCursor})
+            const response: ComAtprotoRepoListRecords.Response = await agent.com.atproto.repo.listRecords({repo: did, collection: 'app.bsky.graph.block', cursor:nextCursor})
 
-            allBlocks = allBlocks.concat(response.data.records);
+            blocks = blocks.concat(response.data.records);
             nextCursor = response.data.cursor;
         } while (nextCursor);
 
-        return allBlocks
+        return blocks
     } catch(error) {
         console.error(`Error getting block list: ${error.message}`)
     }
@@ -89,7 +92,7 @@ async function createBlock(agent, did) {
     const blockEndpoint = baseUrl + "/xrpc/com.atproto.repo.createRecord"
 
     try {
-        const response = await axios.post(blockEndpoint, params, {
+        const response: AxiosResponse = await axios.post(blockEndpoint, params, {
             headers: {
                 'Authorization': `Bearer ${accessToken}`
             }
@@ -100,5 +103,29 @@ async function createBlock(agent, did) {
     }
 }
 
+async function deleteBlock(agent, did, rkey) {
 
-export { authenticateBsky, getFollowers, getFollowingCount, getBlocks, createBlock };
+    const params = {
+        collection: "app.bsky.graph.block",
+        rkey: rkey,
+        repo: agent.session.did
+    }
+
+
+    const accessToken = agent.session.accessJwt
+
+    const blockEndpoint = baseUrl + "/xrpc/com.atproto.repo.deleteRecord"
+
+    try {
+        const response: AxiosResponse = await axios.post(blockEndpoint, params, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+        return response;
+    } catch (error) {
+        console.error(`Error in createBlock: ${error.message}`);
+    }
+}
+
+export { authenticateBsky, getFollowers, getFollowingCount, getBlocks, createBlock, deleteBlock };
