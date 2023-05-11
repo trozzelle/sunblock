@@ -20,7 +20,7 @@ async function userBlockExists(did) {
 
 }
 
-async function parserKeyFromURI (uri: string) {
+async function parseKeyFromURI (uri: string) {
 
     // Needs some guard rails
         const parts = uri.split('/')
@@ -36,23 +36,31 @@ async function syncRepoUserBlockList(agent: BskyAgent, did: string) {
     const allUserBlocks = await getAllUserBlocks()
     const allUserBlocksSet = new Set(allUserBlocks.map(block => block.did))
 
-    if(repoUserBlocks.length > 0) {
+    try {
+        if (repoUserBlocks.length > 0) {
 
-        console.log(`Repo has ${repoUserBlocks.length} blocks`)
-        for (const block of repoUserBlocks) {
-            if(!allUserBlocksSet.has(block.value.subject)) {
+            console.log(`Repo has ${repoUserBlocks.length} blocks`)
+            for (const block of repoUserBlocks) {
+                if (!allUserBlocksSet.has(block.value.subject)) {
 
-                console.log(`Repo block at ${block.uri} does not exist in the local block list.`)
-                const rkey = await parserKeyFromURI(block.uri)
-                const profile = await agent.getProfile({actor:block.value.subject})
-                await insertUserBlock({did: block.value.subject, handle: profile.data.handle, rkey: rkey, reason: 'manual', date_blocked: block.value.createdAt, date_last_updated: new Date().toISOString()})
-                console.log(`${block.value.subject} blocked.`)
+                    console.log(`Repo block at ${block.uri} does not exist in the local block list.`)
+                    const rkey = await parseKeyFromURI(block.uri)
+                    const profile = await agent.getProfile({actor: block.value.subject})
+                    await insertUserBlock({
+                        did: block.value.subject,
+                        handle: profile.data.handle,
+                        rkey: rkey,
+                        reason: 'manual',
+                        date_blocked: block.value.createdAt,
+                        date_last_updated: new Date().toISOString()
+                    })
+                    console.log(`${block.value.subject} blocked.`)
+                }
             }
         }
+    } catch(error) {
+        console.error(`Error syncing with user repo: ${error}`)
     }
-
-
-
 }
 
 async function syncUserBlockList(agent: BskyAgent) {
@@ -71,7 +79,7 @@ async function syncUserBlockList(agent: BskyAgent) {
                 const response = await createBlock(agent, block.did)
                 const {data: {handle}} = await agent.getProfile({actor: block.did})
 
-                const rkey = await parserKeyFromURI(response.data.uri)
+                const rkey = await parseKeyFromURI(response.data.uri)
 
                 await insertUserBlock({did: block.did,
                     handle: handle,
@@ -200,7 +208,7 @@ async function blockSpam(agent: BskyAgent, db: any, followLimit: number): Promis
 
                 if(!blockExists) {
                     const response = await createBlock(agent, follower.did);
-                    const rKey = await parserKeyFromURI(response.data.uri)
+                    const rKey = await parseKeyFromURI(response.data.uri)
                     await insertUserBlock({
                         did: follower.did,
                         handle: follower.handle,

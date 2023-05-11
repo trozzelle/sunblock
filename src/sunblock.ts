@@ -38,22 +38,25 @@ export async function checkAndBlock(): Promise<void> {
 
     try {
         await blockSpam(agent, db, followLimit)
+
+        if (subscriptions) {
+            try {
+                await blockSubscriptions(agent, subscriptions)
+            } catch (error) {
+                console.error(`Error running blocks subscription: ${error.message}`);
+            }
+        }
+
+        await syncUserBlockList(agent)
+
+        const user = agent.session.did
+        await syncRepoUserBlockList(agent, user)
+
     } catch (error) {
         console.error(`Error running spam blocker: ${error.message}`);
     }
 
-    // if (subscriptions) {
-    //     try {
-    //         await blockSubscriptions(agent, subscriptions)
-    //     } catch (error) {
-    //         console.error(`Error running blocks subscription: ${error.message}`);
-    //     }
-    // }
-    //
-    // await syncUserBlockList(agent)
-    //
-    // const user = agent.session.did
-    // await syncRepoUserBlockList(agent, user)
+
 
     console.log("Completed run. Exiting.")
 }
