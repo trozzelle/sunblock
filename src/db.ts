@@ -23,9 +23,9 @@ async function createTables(): Promise<void> {
 interface Follower {
     did: string,
     handle: string,
-    following_count?: number,
+    following_count: number,
     block_status: number,
-    date_last_updated?: string
+    date_last_updated: string
 }
 
 async function insertFollower({did, handle, following_count, block_status, date_last_updated}: Follower) {
@@ -46,16 +46,34 @@ async function updateFollower({did, handle, following_count, block_status, date_
     }
 }
 
-interface SubscriptionBlock {
-    subscribed_did: string;
+async function getFollower(did: string){
+    try {
+        const db = await dbPromise
+        return await db.get('SELECT * FROM followers WHERE did = ?', did)
+    } catch (error) {
+    console.error(`Error in getFollower: ${error.message}`);
+}
+}
+
+async function getAllFollowers() {
+    try {
+        const db = await dbPromise
+        return await db.get('SELECT * FROM followers')
+    } catch (error) {
+        console.error(`Error in getFollower: ${error.message}`);
+    }
+}
+
+interface SubscribedBlock {
     blocked_did: string;
+    subscribed_did: string;
     date_last_updated: string;
 }
 
-async function insertSubscriptionBlock({subscribed_did, blocked_did, date_last_updated}: SubscriptionBlock): Promise<void> {
+async function insertSubscriptionBlock({blocked_did, subscribed_did, date_last_updated}: SubscribedBlock): Promise<void> {
     try {
         const db = await dbPromise;
-        await db.run('INSERT INTO subscriptionBlocks(subscribed_did, blocked_did, date_last_updated) VALUES (?, ?, ?)', [subscribed_did, blocked_did, date_last_updated]);
+        await db.run('INSERT INTO subscriptionBlocks(did, subscribed_did, date_last_updated) VALUES (?, ?, ?)', [blocked_did, subscribed_did, date_last_updated]);
     } catch (error) {
         console.error(`Error in insertSubscriptionBlock: ${error.message}`);
     }
@@ -87,14 +105,41 @@ async function getAllBlocks(): Promise<any> {
     }
 }
 
-async function getAllSubscriptionBlocks(subscribed_did: string): Promise<any> {
+async function getSingleSubscriptionBlocks(subscribed_did: string): Promise<any> {
     try {
         const db = await dbPromise;
         return await db.all(`SELECT blocked_did FROM subscriptionBlocks WHERE subscribed_did = '${subscribed_did}'`);
     } catch (error) {
-        console.error(`Error in getAllBlocks: ${error.message}`);
+        console.error(`Error in getSingleSubscriptionBlocks: ${error.message}`);
+    }
+}
+
+async function getAllSubscriptionBlocks(): Promise<any> {
+    try {
+        const db = await dbPromise;
+        return await db.all('SELECT blocked_did FROM subscriptionBlocks');
+    } catch (error) {
+        console.error(`Error in getAllSubscriptionBlocks: ${error.message}`);
+    }
+}
+
+async function getUniqueDids(leftTable, rightTable) {
+    try {
+        const db = await dbPromise
+        return await db.all(`SELECT a.did FROM ${leftTable} AS a WHERE NOT EXISTS ( SELECT 1 FROM ${rightTable} AS b WHERE b.did = a.did)`)
+    } catch (error) {
+        console.error(`Error in leftJoin: ${error.message}`)
+    }
+}
+
+async function checkBlockExists(did, table) {
+    try {
+        const db = await dbPromise
+        return await db.all(`SELECT EXISTS (SELECT 1 FROM ${table} WHERE did = '${did}')`)
+    } catch (error) {
+        console.error(`Error in ... ${error.message}`)
     }
 }
 
 
-export {dbPromise, createTables, insertFollower, updateFollower, insertSubscriptionBlock, insertUserBlock, getAllBlocks, getAllSubscriptionBlocks}
+export {dbPromise, createTables, insertFollower, updateFollower, getFollower, getAllFollowers, getUniqueDids, insertSubscriptionBlock, insertUserBlock, getAllBlocks, getSingleSubscriptionBlocks, getAllSubscriptionBlocks, checkBlockExists}

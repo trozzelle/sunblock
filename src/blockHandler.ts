@@ -1,7 +1,45 @@
-import {BskyAgent} from "@atproto/api";
+import bsky, { AppBskyGraphBlock, BskyAgent, ComAtprotoRepoListRecords} from "@atproto/api";
 import {createBlock, getBlocks, getFollowers, getFollowingCount} from "./api.js";
-import {getAllBlocks, getAllSubscriptionBlocks, insertFollower, insertSubscriptionBlock, insertUserBlock, updateFollower} from "./db.js";
+import {getAllBlocks, getSingleSubscriptionBlocks, getAllSubscriptionBlocks, getUniqueDids, getFollower, insertFollower, insertSubscriptionBlock, insertUserBlock, updateFollower, checkBlockExists} from "./db.js";
+import {Bsky} from "@atproto/api/dist/helpers/bsky";
 
+interface Blocks extends Array<ComAtprotoRepoListRecords.Record>{}
+
+async function exceedsMaxFollowCount(agent: BskyAgent, did, followLimit ) {
+
+    const followingCount = await getFollowingCount(agent, did);
+
+    const exceedsMax = followingCount > followLimit
+
+    return {exceedsMax, followingCount}
+}
+
+async function userBlockExists(did) {
+
+    const blockExists = await checkBlockExists(did, 'blocks')
+
+    return blockExists.length > 0
+
+}
+
+
+async function updateUserBlockList() {
+
+    const userBlocksCurrent = await getAllBlocks()
+    // const userBlockCurrentsSet = new Set(userBlocksCurrent.map(block => block.did));
+
+    const subscriptionBlocksCurrent = await getAllSubscriptionBlocks()
+    // const subscriptionBlocksCurrentSet = new Set(subscriptionBlocksCurrent.map(block => block.blocked_did))
+
+    const uniqueSubscribedBlocks = await getUniqueDids('subscriptionBlocks', 'blocks')
+
+    const orphanedUserBlocks = await getUniqueDids('blocks', 'subscriptionBlocks')
+
+    console.dir(uniqueSubscribedBlocks)
+    console.dir(orphanedUserBlocks)
+
+
+}
 
 async function blockSubscriptions(agent: BskyAgent, subscriptionsList: string) {
 
@@ -19,12 +57,16 @@ async function blockSubscriptions(agent: BskyAgent, subscriptionsList: string) {
 
             console.log(`Requesting block list from user ${handle}`)
             const {data: {did: subscriptionDid}} = await agent.resolveHandle({handle: handle});
-            const subscriptionBlocksNew = await getBlocks(agent, subscriptionDid);
+            const subscriptionBlocksNew: Blocks = await getBlocks(agent, subscriptionDid);
+
+            if(!subscriptionBlocksNew) {
+                throw Error
+            }
 
             console.log(`Received block list of ${subscriptionBlocksNew.length} entries`)
 
             console.log(`Retrieving all subscribed block lists from the database`)
-            const subscriptionBlocksCurrent = await getAllSubscriptionBlocks(subscriptionDid)
+            const subscriptionBlocksCurrent = await getSingleSubscriptionBlocks(subscriptionDid)
             const subscriptionBlocksCurrentSet = new Set(subscriptionBlocksCurrent.map(block => block.blocked_did))
 
             console.log(`Retrieved ${subscriptionBlocksCurrentSet.size} blocks from the database.`)
@@ -37,7 +79,7 @@ async function blockSubscriptions(agent: BskyAgent, subscriptionsList: string) {
                     const date_last_updated = new Date().toISOString();
 
                     if (!subscriptionBlocksCurrentSet.has(blockDid)) {
-                        await insertSubscriptionBlock({subscribed_did: subscriptionDid, blocked_did: blockDid, date_last_updated});
+                        await insertSubscriptionBlock({blocked_did: blockDid, subscribed_did: subscriptionDid, date_last_updated});
                     } else {
                         console.log(`${blockDid} already exists in block list for ${handle}. Skipping insert.`)
                     }
@@ -72,8 +114,13 @@ async function blockSpam(agent: BskyAgent, db: any, followLimit: number): Promis
     try {
         const followers = await getFollowers(agent);
 
+        if(!followers) {
+            throw Error
+        }
+
         for (const follower of followers) {
-            let followerRow = await db.get('SELECT * FROM followers WHERE did = ?', follower.did);
+
+            let followerRow = await getFollower(follower.did)
             if (!followerRow) {
                 followerRow = {
                     did: follower.did,
@@ -82,13 +129,29 @@ async function blockSpam(agent: BskyAgent, db: any, followLimit: number): Promis
                     block_status: 0,
                     date_last_updated: new Date().toISOString(),
                 };
-                // await db.run('INSERT INTO followers(did, handle, following_count, block_status, date_last_updated) VALUES (?, ?, ?, ?, ?)', [follower.did, follower.handle, follower.following_count, follower.block_status, follower.date_last_updated]);
-                await insertFollower({did: follower.did, handle: follower.handle, following_count: follower.following_count, block_status: follower.block_status, date_last_updated: follower.date_last_updated})
+                await insertFollower({did: follower.did, handle: follower.handle, following_count: follower.following_count, block_status: follower.block_status, date_last_updated: new Date().toISOString()})
             }
-            const followingCount = await getFollowingCount(agent, follower.did);
-            if (followingCount > followLimit) {
+
+            const { exceedsMax, followingCount } = await exceedsMaxFollowCount(agent, follower.did, followLimit)
+
+            // @ts-ignore
+            if (exceedsMax) {
+
                 console.log(`Blocking ${follower.handle} who is following ${followingCount} users.`)
-                await createBlock(agent, follower.did);
+                const blockExists = await userBlockExists(follower.did)
+
+                if(!blockExists) {
+                    await createBlock(agent, follower.did);
+                    await insertUserBlock({
+                        did: follower.did,
+                        handle: follower.handle,
+                        date_blocked: new Date().toISOString(),
+                        date_last_updated: new Date().toISOString()
+                    })
+                    console.log(`Blocking ${follower.handle} who is following ${followingCount} users.`)
+                } else {
+                    console.log(`${follower.handle} is already in block list. Updating followers table then continuing.`)
+                }
                 await updateFollower({did:follower.did, handle: follower.handle, following_count: followingCount, block_status: 1, date_last_updated: new Date().toISOString()})
             } else {
                 console.log(`Doing nothing with ${follower.handle} who is following ${followingCount} users.`)
@@ -102,4 +165,4 @@ async function blockSpam(agent: BskyAgent, db: any, followLimit: number): Promis
 }
 
 
-export {blockSpam, blockSubscriptions}
+export {blockSpam, blockSubscriptions, updateUserBlockList}

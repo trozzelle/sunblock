@@ -1,4 +1,11 @@
-import bsky, {BskyAgent, AppBskyActorGetProfile, AppBskyGraphBlock, AppBskyGraphGetFollowers, ComAtprotoRepoListRecords} from "@atproto/api";
+import bsky, {
+    BskyAgent,
+    AppBskyActorGetProfile,
+    AppBskyGraphBlock,
+    AppBskyGraphGetFollowers,
+    ComAtprotoRepoListRecords,
+    AppBskyGraphFollow, AppBskyActorDefs
+} from "@atproto/api";
 import axios, {AxiosResponse} from "axios";
 import process from "node:process";
 import dotenv from 'dotenv';
@@ -7,11 +14,12 @@ const {BskyAgent} = bsky;
 
 dotenv.config();
 
-const apiUser = process.env.ATPROTO_USER
+const apiUser = process.env.ATPROTO_USER as string
 
 const baseUrl = "https://bsky.social"
 
-interface Blocks extends Array<AppBskyGraphBlock.Record>{}
+interface Blocks extends Array<ComAtprotoRepoListRecords.Record>{}
+interface Followers extends Array<AppBskyActorDefs.ProfileView>{}
 
 async function authenticateBsky(): Promise<BskyAgent> {
     const agent = new BskyAgent({
@@ -21,12 +29,11 @@ async function authenticateBsky(): Promise<BskyAgent> {
         identifier: process.env.ATPROTO_USER,
         password: process.env.ATPROTO_PASS,
     });
-
     return agent;
 }
 
 async function getFollowers(agent: BskyAgent) {
-    let allFollowers = [];
+    let allFollowers: Followers = [];
     let nextCursor;
 
     try {
@@ -46,14 +53,14 @@ async function getFollowingCount(agent: BskyAgent, did: string) {
 
     try {
         const profile: AppBskyActorGetProfile.Response = await agent.getProfile({actor:did})
-
-        return profile.data.followsCount as number;
+        console.dir(profile)
+        return profile.data.followsCount;
     } catch (error) {
         console.error(`Error in getFollowing: ${error.message}`);
     }
 }
 
-async function getBlocks (agent, did) {
+async function getBlocks (agent: BskyAgent, did: string) {
 
     let blocks: Blocks = [];
     let nextCursor;
@@ -73,7 +80,7 @@ async function getBlocks (agent, did) {
 
 }
 
-async function createBlock(agent, did) {
+async function createBlock(agent: BskyAgent, did: string) {
 
     const params = {
         collection: "app.bsky.graph.block",
@@ -82,10 +89,10 @@ async function createBlock(agent, did) {
             createdAt: new Date().toISOString(),
             subject: did
         },
-        repo: agent.session.did
+        repo: agent.session!.did
     }
 
-    const accessToken = agent.session.accessJwt
+    const accessToken = agent.session!.accessJwt
 
     const blockEndpoint = baseUrl + "/xrpc/com.atproto.repo.createRecord"
 
@@ -101,16 +108,16 @@ async function createBlock(agent, did) {
     }
 }
 
-async function deleteBlock(agent, did, rkey) {
+async function deleteBlock(agent: BskyAgent, did: string, rkey: string) {
 
     const params = {
         collection: "app.bsky.graph.block",
         rkey: rkey,
-        repo: agent.session.did
+        repo: agent.session!.did
     }
 
 
-    const accessToken = agent.session.accessJwt
+    const accessToken = agent.session!.accessJwt
 
     const blockEndpoint = baseUrl + "/xrpc/com.atproto.repo.deleteRecord"
 
