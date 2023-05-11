@@ -13,8 +13,8 @@ async function createTables(): Promise<void> {
         const db = await dbPromise;
         await db.run('CREATE TABLE IF NOT EXISTS followers(did text PRIMARY KEY, handle TEXT, following_count INTEGER, block_status INTEGER, date_last_updated TEXT)');
         await db.run('CREATE TABLE IF NOT EXISTS subscriptions(did text PRIMARY KEY, handle TEXT, date_added TEXT, date_last_updated TEXT)')
-        await db.run('CREATE TABLE IF NOT EXISTS subscriptionBlocks(subscribed_did TEXT, blocked_did TEXT, date_last_updated TEXT, PRIMARY KEY (subscribed_did, blocked_did))')
-        await db.run('CREATE TABLE IF NOT EXISTS blocks(did text PRIMARY KEY, handle TEXT, date_blocked TEXT, date_last_updated TEXT)')
+        await db.run('CREATE TABLE IF NOT EXISTS subscriptionBlocks(did TEXT, subscribed_did TEXT, date_last_updated TEXT, PRIMARY KEY (subscribed_did, did))')
+        await db.run('CREATE TABLE IF NOT EXISTS blocks(did text PRIMARY KEY, handle TEXT, r_key TEXT, date_blocked TEXT, date_last_updated TEXT)')
     } catch (error) {
         console.error(`Error in createTable: ${error.message}`);
     }
@@ -79,24 +79,44 @@ async function insertSubscriptionBlock({blocked_did, subscribed_did, date_last_u
     }
 }
 
+async function deleteSubscriptionBlock(did:string) {
+    try {
+        const db = await dbPromise
+        await db.run(`DELETE FROM subscriptionBlocks WHERE did = '${did}'`)
+
+    } catch (error) {
+        console.error(`Error deleting subscription block: ${error}`)
+    }
+}
+
 interface UserBlock {
     did: string;
     handle: string;
+    r_key: string;
     date_blocked: string;
     date_last_updated: string;
 }
 
-async function insertUserBlock({did, handle, date_blocked, date_last_updated}: UserBlock): Promise<void> {
+async function insertUserBlock({did, handle, r_key, date_blocked, date_last_updated}: UserBlock): Promise<void> {
     try {
         const db = await dbPromise;
-        await db.run('INSERT INTO blocks(did, handle, date_blocked, date_last_updated) VALUES (?, ?, ?, ?)', [did, handle, date_blocked, date_last_updated]);
+        await db.run('INSERT INTO blocks(did, handle, r_key, date_blocked, date_last_updated) VALUES (?, ?, ?, ?, ?)', [did, handle, r_key, date_blocked, date_last_updated]);
     } catch (error) {
         console.error(`Error in insertUserBlock: ${error.message}`);
     }
 }
 
+async function deleteUserBlock(did: string) {
+    try{
+        const db = await dbPromise
+        await db.run(`DELETE FROM blocks WHERE did = '${did}'`)
+    } catch (error) {
+        console.error(`Error deleting user block: ${error.message}`)
+    }
+}
 
-async function getAllBlocks(): Promise<any> {
+
+async function getAllUserBlocks(): Promise<any> {
     try {
         const db = await dbPromise;
         return await db.all('SELECT did FROM blocks');
@@ -108,7 +128,7 @@ async function getAllBlocks(): Promise<any> {
 async function getSingleSubscriptionBlocks(subscribed_did: string): Promise<any> {
     try {
         const db = await dbPromise;
-        return await db.all(`SELECT blocked_did FROM subscriptionBlocks WHERE subscribed_did = '${subscribed_did}'`);
+        return await db.all(`SELECT did FROM subscriptionBlocks WHERE subscribed_did = '${subscribed_did}'`);
     } catch (error) {
         console.error(`Error in getSingleSubscriptionBlocks: ${error.message}`);
     }
@@ -117,7 +137,7 @@ async function getSingleSubscriptionBlocks(subscribed_did: string): Promise<any>
 async function getAllSubscriptionBlocks(): Promise<any> {
     try {
         const db = await dbPromise;
-        return await db.all('SELECT blocked_did FROM subscriptionBlocks');
+        return await db.all('SELECT did FROM subscriptionBlocks');
     } catch (error) {
         console.error(`Error in getAllSubscriptionBlocks: ${error.message}`);
     }
@@ -128,18 +148,19 @@ async function getUniqueDids(leftTable, rightTable) {
         const db = await dbPromise
         return await db.all(`SELECT a.did FROM ${leftTable} AS a WHERE NOT EXISTS ( SELECT 1 FROM ${rightTable} AS b WHERE b.did = a.did)`)
     } catch (error) {
-        console.error(`Error in leftJoin: ${error.message}`)
+        console.error(`Error in getUniqueDids: ${error.message}`)
     }
 }
 
 async function checkBlockExists(did, table) {
     try {
         const db = await dbPromise
-        return await db.all(`SELECT EXISTS (SELECT 1 FROM ${table} WHERE did = '${did}')`)
+        const result = await db.get(`SELECT COUNT(*) as count FROM ${table} WHERE did = '${did}'`)
+        return result.count
     } catch (error) {
         console.error(`Error in ... ${error.message}`)
     }
 }
 
 
-export {dbPromise, createTables, insertFollower, updateFollower, getFollower, getAllFollowers, getUniqueDids, insertSubscriptionBlock, insertUserBlock, getAllBlocks, getSingleSubscriptionBlocks, getAllSubscriptionBlocks, checkBlockExists}
+export {dbPromise, createTables, insertFollower, updateFollower, getFollower, getAllFollowers, getUniqueDids, insertSubscriptionBlock, insertUserBlock, deleteUserBlock, deleteSubscriptionBlock, getAllUserBlocks, getSingleSubscriptionBlocks, getAllSubscriptionBlocks, checkBlockExists}

@@ -1,6 +1,6 @@
 import bsky, { AppBskyGraphBlock, BskyAgent, ComAtprotoRepoListRecords} from "@atproto/api";
-import {createBlock, getBlocks, getFollowers, getFollowingCount} from "./api.js";
-import {getAllBlocks, getSingleSubscriptionBlocks, getAllSubscriptionBlocks, getUniqueDids, getFollower, insertFollower, insertSubscriptionBlock, insertUserBlock, updateFollower, checkBlockExists} from "./db.js";
+import {createBlock, deleteBlock, getBlocks, getFollowers, getFollowingCount} from "./api.js";
+import {getAllUserBlocks, getSingleSubscriptionBlocks, getAllSubscriptionBlocks, getUniqueDids, getFollower, insertFollower, insertSubscriptionBlock, insertUserBlock, deleteUserBlock, deleteSubscriptionBlock, updateFollower, checkBlockExists} from "./db.js";
 import {Bsky} from "@atproto/api/dist/helpers/bsky";
 
 interface Blocks extends Array<ComAtprotoRepoListRecords.Record>{}
@@ -8,7 +8,6 @@ interface Blocks extends Array<ComAtprotoRepoListRecords.Record>{}
 async function exceedsMaxFollowCount(agent: BskyAgent, did, followLimit ) {
 
     const followingCount = await getFollowingCount(agent, did);
-
     const exceedsMax = followingCount > followLimit
 
     return {exceedsMax, followingCount}
@@ -17,27 +16,61 @@ async function exceedsMaxFollowCount(agent: BskyAgent, did, followLimit ) {
 async function userBlockExists(did) {
 
     const blockExists = await checkBlockExists(did, 'blocks')
-
-    return blockExists.length > 0
+    return blockExists > 0
 
 }
 
+async function parserKeyFromURI (uri: string) {
 
-async function updateUserBlockList() {
+    // Needs some guard rails
+        const parts = uri.split('/')
+        const rKey = parts[parts.length - 1]
 
-    const userBlocksCurrent = await getAllBlocks()
-    // const userBlockCurrentsSet = new Set(userBlocksCurrent.map(block => block.did));
+        return rKey
 
-    const subscriptionBlocksCurrent = await getAllSubscriptionBlocks()
-    // const subscriptionBlocksCurrentSet = new Set(subscriptionBlocksCurrent.map(block => block.blocked_did))
+}
+
+async function syncUserBlockList(agent) {
+
+    // const userBlocksCurrent = await getAllUserBlocks()
+    // const subscriptionBlocksCurrent = await getAllSubscriptionBlocks()
+
+    console.log('Starting user block list sync...')
 
     const uniqueSubscribedBlocks = await getUniqueDids('subscriptionBlocks', 'blocks')
-
     const orphanedUserBlocks = await getUniqueDids('blocks', 'subscriptionBlocks')
 
-    console.dir(uniqueSubscribedBlocks)
-    console.dir(orphanedUserBlocks)
+    console.log(`${uniqueSubscribedBlocks.length} new blocks from subscriptions. ${orphanedUserBlocks.length} orphaned blocks to unblock.`)
 
+    if(uniqueSubscribedBlocks.length > 0) {
+        for (const block of uniqueSubscribedBlocks) {
+            try {
+
+                const response = await createBlock(agent, block.did)
+                const {data: {handle}} = await agent.getProfile({actor: block.did})
+
+                const rKey = await parserKeyFromURI(response.data.uri)
+
+                await insertUserBlock({did: block.did, handle: handle, r_key: rKey, date_blocked: new Date().toISOString(), date_last_updated: new Date().toISOString()} )
+
+                console.log(`${block.did} blocked`)
+
+            } catch (error) {
+                console.error(`Unable to process blocking for ${block.did}: ${error}`)
+            }
+        }
+    }
+
+    if(orphanedUserBlocks.length > 0) {
+        for(const block of orphanedUserBlocks) {
+            try {
+                await deleteBlock(agent, block.did)
+                await deleteUserBlock(block.did)
+            } catch(error) {
+                console.error('')
+            }
+        }
+    }
 
 }
 
@@ -48,14 +81,14 @@ async function blockSubscriptions(agent: BskyAgent, subscriptionsList: string) {
     console.log(`Retrieving blocks for the following users: ${subscriptions}`)
 
     try {
-        const userBlocksAll = await getAllBlocks();
-        const userBlocksSet = new Set(userBlocksAll.map(block => block.did));
+        const newSubscriptionDidsSet = new Set();
 
-        console.log(`Retrieved ${userBlocksSet.size} blocks from the database.`)
+        const allSubscriptionBlocksCurrent = await getAllSubscriptionBlocks()
 
         for (const handle of subscriptions) {
 
             console.log(`Requesting block list from user ${handle}`)
+
             const {data: {did: subscriptionDid}} = await agent.resolveHandle({handle: handle});
             const subscriptionBlocksNew: Blocks = await getBlocks(agent, subscriptionDid);
 
@@ -64,16 +97,16 @@ async function blockSubscriptions(agent: BskyAgent, subscriptionsList: string) {
             }
 
             console.log(`Received block list of ${subscriptionBlocksNew.length} entries`)
-
             console.log(`Retrieving all subscribed block lists from the database`)
+
             const subscriptionBlocksCurrent = await getSingleSubscriptionBlocks(subscriptionDid)
-            const subscriptionBlocksCurrentSet = new Set(subscriptionBlocksCurrent.map(block => block.blocked_did))
+            const subscriptionBlocksCurrentSet = new Set(subscriptionBlocksCurrent.map(block => block.did))
 
             console.log(`Retrieved ${subscriptionBlocksCurrentSet.size} blocks from the database.`)
 
             for (const block of subscriptionBlocksNew) {
-
                 const blockDid = block.value.subject
+                newSubscriptionDidsSet.add(blockDid)
 
                 try {
                     const date_last_updated = new Date().toISOString();
@@ -84,24 +117,16 @@ async function blockSubscriptions(agent: BskyAgent, subscriptionsList: string) {
                         console.log(`${blockDid} already exists in block list for ${handle}. Skipping insert.`)
                     }
 
-                    if (!userBlocksSet.has(blockDid)) {
-
-                        const blockProfile = await agent.getProfile({actor: blockDid})
-                        const date_blocked = new Date().toISOString();
-
-                        await createBlock(agent, blockDid);
-                        await insertUserBlock({did: blockDid, handle: blockProfile.data.handle, date_blocked, date_last_updated});
-
-                        console.log(`${blockProfile.data.handle} blocked.`)
-
-                        userBlocksSet.add(blockDid);
-                    } else {
-                        console.log(`${blockDid} already exists in user block list. Skipping.`)
-                    }
-
                 } catch (error) {
-                    console.error(`Error blocking user: ${error.message}`);
+                    console.error(`Error adding subscription block for user: ${error.message}`);
                 }
+            }
+        }
+
+        for (const block of allSubscriptionBlocksCurrent) {
+            if(!newSubscriptionDidsSet.has(block.did)) {
+                await deleteSubscriptionBlock(block.did)
+                console.log(`Removed ${block.did} from subscriptionBlocks as it no longer appears in any subscription lists`)
             }
         }
     } catch (error) {
@@ -141,14 +166,16 @@ async function blockSpam(agent: BskyAgent, db: any, followLimit: number): Promis
                 const blockExists = await userBlockExists(follower.did)
 
                 if(!blockExists) {
-                    await createBlock(agent, follower.did);
+                    const response = await createBlock(agent, follower.did);
+                    const rKey = await parserKeyFromURI(response.data.uri)
                     await insertUserBlock({
                         did: follower.did,
                         handle: follower.handle,
+                        r_key: rKey,
                         date_blocked: new Date().toISOString(),
                         date_last_updated: new Date().toISOString()
                     })
-                    console.log(`Blocking ${follower.handle} who is following ${followingCount} users.`)
+                    console.log(`Blocked ${follower.handle}.`)
                 } else {
                     console.log(`${follower.handle} is already in block list. Updating followers table then continuing.`)
                 }
@@ -164,5 +191,4 @@ async function blockSpam(agent: BskyAgent, db: any, followLimit: number): Promis
     }
 }
 
-
-export {blockSpam, blockSubscriptions, updateUserBlockList}
+export {blockSpam, blockSubscriptions, syncUserBlockList}

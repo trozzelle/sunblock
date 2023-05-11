@@ -93,7 +93,6 @@ async function createBlock(agent: BskyAgent, did: string) {
     }
 
     const accessToken = agent.session!.accessJwt
-
     const blockEndpoint = baseUrl + "/xrpc/com.atproto.repo.createRecord"
 
     try {
@@ -116,9 +115,7 @@ async function deleteBlock(agent: BskyAgent, did: string, rkey: string) {
         repo: agent.session!.did
     }
 
-
     const accessToken = agent.session!.accessJwt
-
     const blockEndpoint = baseUrl + "/xrpc/com.atproto.repo.deleteRecord"
 
     try {

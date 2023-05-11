@@ -5,7 +5,7 @@ import {
     createTables,
 } from "./db.js";
 import {authenticateBsky} from "./api.js";
-import {blockSpam, blockSubscriptions, updateUserBlockList} from "./blockHandler.js";
+import {blockSpam, blockSubscriptions, syncUserBlockList} from "./blockHandler.js";
 import sqlite3 from "sqlite3";
 
 const res = dotenv.config();
@@ -50,7 +50,7 @@ export async function checkAndBlock(): Promise<void> {
         }
     }
 
-    await updateUserBlockList()
+    await syncUserBlockList(agent)
 
 
     console.log("Completed run. Exiting.")
