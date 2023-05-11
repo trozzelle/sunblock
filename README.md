@@ -4,3 +4,5 @@ This is a short script that will read through your followers and block anyone wh
 you set in the .env file. 
 
 You can schedule the script by running `node scheduler.js`. Currently, it is set to execute every hour.
+
+#### Code is under heavy construction. Look at last commit to main for working code.
