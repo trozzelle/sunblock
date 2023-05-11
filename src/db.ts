@@ -8,7 +8,7 @@ const dbPromise: Promise<Database> = open({
     driver: sqlite3.Database,
 });
 
-async function createTable(): Promise<void> {
+async function createTables(): Promise<void> {
     try {
         const db = await dbPromise;
         await db.run('CREATE TABLE IF NOT EXISTS followers(did text PRIMARY KEY, handle TEXT, following_count INTEGER, block_status INTEGER, date_last_updated TEXT)');
@@ -56,4 +56,5 @@ async function getAllSubscriptionBlocks(subscribed_did): Promise<any> {
     }
 }
 
-export {dbPromise, createTable, insertSubscriptionBlock, insertUserBlock, getAllBlocks, getAllSubscriptionBlocks}
+
+export {dbPromise, createTables, insertSubscriptionBlock, insertUserBlock, getAllBlocks, getAllSubscriptionBlocks}
