@@ -1,7 +1,20 @@
-import bsky, { AppBskyGraphBlock, BskyAgent, ComAtprotoRepoListRecords} from "@atproto/api";
+import {BskyAgent, ComAtprotoRepoListRecords} from "@atproto/api";
 import {createBlock, deleteBlock, getBlocks, getFollowers, getFollowingCount} from "./api.js";
-import {getAllUserBlocks, getSingleSubscriptionBlocks, getAllSubscriptionBlocks, getUniqueDids, getFollower, insertFollower, insertSubscriptionBlock, insertUserBlock, getSingleUserBlock, deleteUserBlock, deleteSubscriptionBlock, updateFollower, getAllSubscriptions, checkBlockExists} from "./db.js";
-import {Bsky} from "@atproto/api/dist/helpers/bsky";
+import {
+    checkBlockExists,
+    deleteSubscriptionBlock,
+    deleteUserBlock,
+    getAllSubscriptionBlocks,
+    getAllUserBlocks,
+    getFollower,
+    getSingleSubscriptionBlocks,
+    getSingleUserBlock,
+    getUniqueDids,
+    insertFollower,
+    insertSubscriptionBlock,
+    insertUserBlock,
+    updateFollower
+} from "./db.js";
 
 interface Blocks extends Array<ComAtprotoRepoListRecords.Record>{}
 
@@ -22,11 +35,9 @@ async function userBlockExists(did) {
 
 async function parseKeyFromURI (uri: string) {
 
-    // Needs some guard rails
+        // Needs some guard rails
         const parts = uri.split('/')
-        const rKey = parts[parts.length - 1]
-
-        return rKey
+        return parts[parts.length - 1]
 
 }
 
