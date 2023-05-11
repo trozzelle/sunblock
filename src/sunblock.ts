@@ -5,7 +5,7 @@ import {
     createTables,
 } from "./db.js";
 import {authenticateBsky} from "./api.js";
-import {blockSpam, blockSubscriptions, syncUserBlockList} from "./blockHandler.js";
+import {blockSpam, blockSubscriptions, syncUserBlockList, syncRepoUserBlockList} from "./blockHandler.js";
 import sqlite3 from "sqlite3";
 
 const res = dotenv.config();
@@ -36,22 +36,24 @@ export async function checkAndBlock(): Promise<void> {
 
     console.log("Database opened.")
 
-    // try {
-    //     await blockSpam(agent, db, followLimit)
-    // } catch (error) {
-    //     console.error(`Error running spam blocker: ${error.message}`);
-    // }
-
-    if (subscriptions) {
-        try {
-            await blockSubscriptions(agent, subscriptions)
-        } catch (error) {
-            console.error(`Error running blocks subscription: ${error.message}`);
-        }
+    try {
+        await blockSpam(agent, db, followLimit)
+    } catch (error) {
+        console.error(`Error running spam blocker: ${error.message}`);
     }
 
-    await syncUserBlockList(agent)
-
+    // if (subscriptions) {
+    //     try {
+    //         await blockSubscriptions(agent, subscriptions)
+    //     } catch (error) {
+    //         console.error(`Error running blocks subscription: ${error.message}`);
+    //     }
+    // }
+    //
+    // await syncUserBlockList(agent)
+    //
+    // const user = agent.session.did
+    // await syncRepoUserBlockList(agent, user)
 
     console.log("Completed run. Exiting.")
 }
