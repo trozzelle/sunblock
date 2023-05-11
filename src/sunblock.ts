@@ -3,20 +3,22 @@ import dotenv from 'dotenv';
 import {
     dbPromise,
     createTables,
-} from "./db";
-import {authenticateBsky} from "./api";
-import {blockSpam, blockSubscriptions} from "./blockHandler";
+} from "./db.js";
+import {authenticateBsky} from "./api.js";
+import {blockSpam, blockSubscriptions, syncUserBlockList, syncRepoUserBlockList} from "./blockHandler.js";
+import sqlite3 from "sqlite3";
 
 const res = dotenv.config();
 
 // @ts-ignore
 if (!res.parsed.ATPROTO_USER || !res.parsed.ATPROTO_PASS) {
-    throw new Error('Environment variables ATPROTO_USER and ATPROTO_PASS must be set');
+    throw new Error('Environment variables ATPROTO_USER and ATPROTO_PASS must be set')
 }
 
 const followLimit = process.env.FOLLOW_LIMIT as string
 const subscriptions = process.env.SUBSCRIPTIONS as string
 
+sqlite3.verbose()
 
 export async function checkAndBlock(): Promise<void> {
 
@@ -25,6 +27,10 @@ export async function checkAndBlock(): Promise<void> {
     const agent = await authenticateBsky()
     console.log("Authenticated with Bluesky.")
 
+    if(!agent.session) {
+        throw Error
+    }
+
     const db = await dbPromise;
     await createTables();
 
@@ -32,17 +38,24 @@ export async function checkAndBlock(): Promise<void> {
 
     try {
         await blockSpam(agent, db, followLimit)
+
+        if (subscriptions) {
+            try {
+                await blockSubscriptions(agent, subscriptions)
+            } catch (error) {
+                console.error(`Error running blocks subscription: ${error.message}`);
+            }
+        }
+
+        await syncUserBlockList(agent)
+
+        const user = agent.session.did
+        await syncRepoUserBlockList(agent, user)
+
     } catch (error) {
         console.error(`Error running spam blocker: ${error.message}`);
     }
 
-    if (subscriptions) {
-        try {
-            await blockSubscriptions(agent, subscriptions)
-        } catch (error) {
-            console.error(`Error running blocks subscription: ${error.message}`);
-        }
-    }
 
 
     console.log("Completed run. Exiting.")
