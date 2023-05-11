@@ -13,8 +13,6 @@ const baseUrl = "https://bsky.social"
 
 interface Blocks extends Array<AppBskyGraphBlock.Record>{}
 
-
-
 async function authenticateBsky(): Promise<BskyAgent> {
     const agent = new BskyAgent({
         service: baseUrl,
@@ -27,7 +25,7 @@ async function authenticateBsky(): Promise<BskyAgent> {
     return agent;
 }
 
-async function getFollowers(agent) {
+async function getFollowers(agent: BskyAgent) {
     let allFollowers = [];
     let nextCursor;
 
@@ -44,12 +42,12 @@ async function getFollowers(agent) {
     }
 }
 
-async function getFollowingCount(agent, did) {
+async function getFollowingCount(agent: BskyAgent, did: string) {
 
     try {
         const profile: AppBskyActorGetProfile.Response = await agent.getProfile({actor:did})
 
-        return profile.data.followsCount;
+        return profile.data.followsCount as number;
     } catch (error) {
         console.error(`Error in getFollowing: ${error.message}`);
     }

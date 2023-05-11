@@ -1,5 +1,5 @@
 import schedule from "node-schedule";
-import { checkAndBlock } from "./sunblock";
+import { checkAndBlock } from "./sunblock.js";
 
 /***
  * Scheduler handler for bot to be used with PM2

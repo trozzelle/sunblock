@@ -3,9 +3,9 @@ import dotenv from 'dotenv';
 import {
     dbPromise,
     createTables,
-} from "./db";
-import {authenticateBsky} from "./api";
-import {blockSpam, blockSubscriptions} from "./blockHandler";
+} from "./db.js";
+import {authenticateBsky} from "./api.js";
+import {blockSpam, blockSubscriptions} from "./blockHandler.js";
 
 const res = dotenv.config();
 

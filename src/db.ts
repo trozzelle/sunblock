@@ -20,7 +20,39 @@ async function createTables(): Promise<void> {
     }
 }
 
-async function insertSubscriptionBlock(subscribed_did: string, blocked_did: string, date_last_updated: string): Promise<void> {
+interface Follower {
+    did: string,
+    handle: string,
+    following_count?: number,
+    block_status: number,
+    date_last_updated?: string
+}
+
+async function insertFollower({did, handle, following_count, block_status, date_last_updated}: Follower) {
+    try {
+        const db = await dbPromise
+        await db.run('INSERT INTO followers(did, handle, following_count, block_status, date_last_updated) VALUES (?, ?, ?, ?, ?)', [did, handle, following_count, block_status, date_last_updated])
+    } catch (error) {
+        console.error(`Error in insertFollower: ${error.message}`);
+    }
+}
+
+async function updateFollower({did, handle, following_count, block_status, date_last_updated}: Follower) {
+    try {
+        const db = await dbPromise
+        await db.run('UPDATE followers SET handle = ?, following_count = ?, block_status = ?, date_last_updated = ? WHERE did = ?', [handle, following_count, block_status, date_last_updated, did])
+    } catch (error) {
+        console.error(`Error in insertFollower: ${error.message}`);
+    }
+}
+
+interface SubscriptionBlock {
+    subscribed_did: string;
+    blocked_did: string;
+    date_last_updated: string;
+}
+
+async function insertSubscriptionBlock({subscribed_did, blocked_did, date_last_updated}: SubscriptionBlock): Promise<void> {
     try {
         const db = await dbPromise;
         await db.run('INSERT INTO subscriptionBlocks(subscribed_did, blocked_did, date_last_updated) VALUES (?, ?, ?)', [subscribed_did, blocked_did, date_last_updated]);
@@ -29,7 +61,14 @@ async function insertSubscriptionBlock(subscribed_did: string, blocked_did: stri
     }
 }
 
-async function insertUserBlock(did: string, handle: string, date_blocked: string, date_last_updated: string): Promise<void> {
+interface UserBlock {
+    did: string;
+    handle: string;
+    date_blocked: string;
+    date_last_updated: string;
+}
+
+async function insertUserBlock({did, handle, date_blocked, date_last_updated}: UserBlock): Promise<void> {
     try {
         const db = await dbPromise;
         await db.run('INSERT INTO blocks(did, handle, date_blocked, date_last_updated) VALUES (?, ?, ?, ?)', [did, handle, date_blocked, date_last_updated]);
@@ -37,6 +76,7 @@ async function insertUserBlock(did: string, handle: string, date_blocked: string
         console.error(`Error in insertUserBlock: ${error.message}`);
     }
 }
+
 
 async function getAllBlocks(): Promise<any> {
     try {
@@ -47,7 +87,7 @@ async function getAllBlocks(): Promise<any> {
     }
 }
 
-async function getAllSubscriptionBlocks(subscribed_did): Promise<any> {
+async function getAllSubscriptionBlocks(subscribed_did: string): Promise<any> {
     try {
         const db = await dbPromise;
         return await db.all(`SELECT blocked_did FROM subscriptionBlocks WHERE subscribed_did = '${subscribed_did}'`);
@@ -57,4 +97,4 @@ async function getAllSubscriptionBlocks(subscribed_did): Promise<any> {
 }
 
 
-export {dbPromise, createTables, insertSubscriptionBlock, insertUserBlock, getAllBlocks, getAllSubscriptionBlocks}
+export {dbPromise, createTables, insertFollower, updateFollower, insertSubscriptionBlock, insertUserBlock, getAllBlocks, getAllSubscriptionBlocks}
