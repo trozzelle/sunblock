@@ -39,7 +39,7 @@ async function authenticateBsky(): Promise<BskyAgent> {
 async function getProfile(agent: BskyAgent, did: Did) {
 
     try {
-        return profile: AppBskyActorGetProfile.Response = await agent.getProfile({actor:did})
+        return await agent.getProfile({actor:did})
     } catch (error) {
         apiLogger.error(`Error in getFollowing: ${error.message}`);
     }

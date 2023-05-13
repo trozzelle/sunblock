@@ -18,7 +18,7 @@ async function createTables(): Promise<void> {
     try {
         const db = await dbPromise;
         await db.run('CREATE TABLE IF NOT EXISTS followers(did text PRIMARY KEY, handle TEXT, following_count INTEGER, block_status INTEGER, date_last_updated TEXT)');
-        // await db.run('CREATE TABLE IF NOT EXISTS subscriptions(did text PRIMARY KEY, handle TEXT, date_added TEXT, date_last_updated TEXT)')
+        await db.run('CREATE TABLE IF NOT EXISTS subscriptions(did text PRIMARY KEY, handle TEXT, block_count INTEGER, date_added TEXT, date_last_updated TEXT)')
         await db.run('CREATE TABLE IF NOT EXISTS subscriptionBlocks(did TEXT, subscribed_did TEXT, reason TEXT, date_last_updated TEXT, PRIMARY KEY (subscribed_did, did))')
         await db.run('CREATE TABLE IF NOT EXISTS blocks(did text PRIMARY KEY, handle TEXT, r_key TEXT, reason TEXT, date_blocked TEXT, date_last_updated TEXT)')
     } catch (error) {
