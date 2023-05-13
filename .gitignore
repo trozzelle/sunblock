@@ -210,3 +210,4 @@ dist
 
 # SQLite
 /src/adhoc.ts
+!/src/adhoc.ts
