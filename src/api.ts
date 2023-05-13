@@ -1,3 +1,4 @@
+// @ts-ignore
 import bsky, {
     BskyAgent,
     AppBskyActorGetProfile,
@@ -8,6 +9,7 @@ import axios, {AxiosResponse} from "axios";
 import process from "node:process";
 import dotenv from 'dotenv';
 import logger from "./logger.js";
+// @ts-ignore
 const {BskyAgent} = bsky;
 import {Block, Follower, Did} from "./types";
 
@@ -37,8 +39,7 @@ async function authenticateBsky(): Promise<BskyAgent> {
 async function getProfile(agent: BskyAgent, did: Did) {
 
     try {
-        const profile: AppBskyActorGetProfile.Response = await agent.getProfile({actor:did})
-        return profile;
+        return profile: AppBskyActorGetProfile.Response = await agent.getProfile({actor:did})
     } catch (error) {
         apiLogger.error(`Error in getFollowing: ${error.message}`);
     }
@@ -47,7 +48,7 @@ async function getProfile(agent: BskyAgent, did: Did) {
 // Gets all followers of the calling user
 async function getFollowers(agent: BskyAgent) {
     let allFollowers: Follower[] = [];
-    let nextCursor;
+    let nextCursor: string;
 
     try {
         do {
@@ -78,7 +79,7 @@ async function getFollowingCount(agent: BskyAgent, did: Did) {
 async function getBlocks (agent: BskyAgent, did: Did) {
 
     let blocks: Block[] = [];
-    let nextCursor;
+    let nextCursor: string;
 
     try {
         do {
@@ -129,10 +130,10 @@ async function deleteBlock(agent: BskyAgent, did: Did, rkey: string) {
     const params = {
         collection: "app.bsky.graph.block",
         rkey: rkey,
-        repo: agent.session!.did
+        repo: agent.session.did
     }
 
-    const accessToken = agent.session!.accessJwt
+    const accessToken = agent.session.accessJwt
     const blockEndpoint = baseUrl + "/xrpc/com.atproto.repo.deleteRecord"
 
     try {

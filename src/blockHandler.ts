@@ -1,5 +1,5 @@
-import bsky, { AtpAgent, BskyAgent} from "@atproto/api";
-import {createBlock, deleteBlock, getBlocks, getProfile, getFollowers, getFollowingCount} from "./api.js";
+import { BskyAgent} from "@atproto/api";
+import {createBlock, deleteBlock, getBlocks, getFollowers, getFollowingCount} from "./api.js";
 import {
     checkBlockExists,
     deleteSubscriptionBlock,
@@ -16,7 +16,7 @@ import {
     insertUserBlock,
     updateFollower
 } from "./db.js";
-import {Block, BlockRecord, Follower, FollowerRow, Uri, Did, ExceedsMaxFollowCountResult} from "./types";
+import {Block, BlockRecord, FollowerRow, Uri, Did, ExceedsMaxFollowCountResult} from "./types";
 import logger from "./logger.js";
 
 const blockLogger = logger.child({module: 'blockHandler.ts'})
@@ -166,6 +166,12 @@ async function syncUserBlockList(agent: BskyAgent) {
 
 }
 
+export interface ResolvedHandle {
+    data: {
+        did: Did
+    }
+}
+
 async function blockSubscriptions(agent: BskyAgent, subscriptionsList: string) {
 
     let subscriptions = []
@@ -186,7 +192,7 @@ async function blockSubscriptions(agent: BskyAgent, subscriptionsList: string) {
                 blockLogger.info(`Requesting block list from user ${handle}`)
 
                 const {data: {did: subscriptionDid}} = await agent.resolveHandle({handle: handle});
-                const subscriptionBlocksNew: Block[] = await getBlocks(agent, subscriptionDid);
+                const subscriptionBlocksNew: Block[] = await getBlocks(agent, subscriptionDid as Did);
 
                 if (!subscriptionBlocksNew) {
                     throw Error
@@ -195,7 +201,7 @@ async function blockSubscriptions(agent: BskyAgent, subscriptionsList: string) {
                 blockLogger.info(`Received block list of ${subscriptionBlocksNew.length} entries`)
                 blockLogger.info(`Retrieving all subscribed block lists from the database`)
 
-                const subscriptionBlocksCurrent = await getSingleSubscriptionBlocks(subscriptionDid)
+                const subscriptionBlocksCurrent = await getSingleSubscriptionBlocks(subscriptionDid as Did)
                 const subscriptionBlocksCurrentSet = new Set(subscriptionBlocksCurrent.map(block => block.did))
 
                 blockLogger.info(`Retrieved ${subscriptionBlocksCurrentSet.size} blocks from the database.`)

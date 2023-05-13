@@ -43,6 +43,7 @@ export async function checkAndBlock(): Promise<void> {
     try {
         const user = agent.session.did as Did
         await blockSpam(agent, db, followLimit)
+
         if (subscriptions) {
             try {
                 await blockSubscriptions(agent, subscriptions)
