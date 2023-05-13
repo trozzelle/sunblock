@@ -9,7 +9,10 @@ import bsky, {
 import axios, {AxiosResponse} from "axios";
 import process from "node:process";
 import dotenv from 'dotenv';
+import logger from "./logger";
 const {BskyAgent} = bsky;
+
+const apiLogger = logger.child({module: 'api.ts'})
 
 
 dotenv.config();

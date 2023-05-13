@@ -8,17 +8,21 @@ import {
     getAllUserBlocks,
     getFollower,
     getSingleSubscriptionBlocks,
-    getSingleUserBlock,
+    getUserBlock,
     getUniqueDids,
     insertFollower,
     insertSubscriptionBlock,
     insertUserBlock,
     updateFollower
 } from "./db.js";
+import logger from "./logger";
+
+const blockLogger = logger.child({module: 'blockHandler.ts'})
+
 
 interface Blocks extends Array<ComAtprotoRepoListRecords.Record>{}
 
-async function exceedsMaxFollowCount(agent: BskyAgent, did, followLimit ) {
+async function exceedsMaxFollowCount(agent: BskyAgent, did: string, followLimit: string | number ): Promise({exceedsMax: boolean, followingCount: number}) {
 
     const followingCount = await getFollowingCount(agent, did);
     const exceedsMax = followingCount > followLimit
@@ -26,17 +30,18 @@ async function exceedsMaxFollowCount(agent: BskyAgent, did, followLimit ) {
     return {exceedsMax, followingCount}
 }
 
-async function userBlockExists(did) {
+async function userBlockExists(did: string): Promise<Boolean> {
 
     const blockExists = await checkBlockExists(did, 'blocks')
     return blockExists > 0
 
 }
 
-async function parseKeyFromURI (uri: string) {
+async function parseKeyFromURI (uri: string): Promise<String> {
 
         // Needs some guard rails
         const parts = uri.split('/')
+
         return parts[parts.length - 1]
 
 }
@@ -110,7 +115,7 @@ async function syncUserBlockList(agent: BskyAgent) {
     if(orphanedUserBlocks.length > 0) {
         for(const block of orphanedUserBlocks) {
             try {
-                const record = await getSingleUserBlock(block.did)
+                const record = await getUserBlock(block.did)
                 const response = await deleteBlock(agent, block.did, record.r_key)
 
                 if (response.status == '200') {

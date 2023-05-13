@@ -7,8 +7,10 @@ import {
 import {authenticateBsky} from "./api.js";
 import {blockSpam, blockSubscriptions, syncUserBlockList, syncRepoUserBlockList} from "./blockHandler.js";
 import sqlite3 from "sqlite3";
-
+import logger from "./logger";
 const res = dotenv.config();
+
+const mainLogger = logger.child({module: 'sunblock'})
 
 // @ts-ignore
 if (!res.parsed.ATPROTO_USER || !res.parsed.ATPROTO_PASS) {

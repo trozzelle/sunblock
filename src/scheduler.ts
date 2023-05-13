@@ -1,5 +1,8 @@
 import schedule from "node-schedule";
 import { checkAndBlock } from "./sunblock.js";
+import logger from "./logger";
+const scheduleLogger = logger.child({module: 'scheduler.ts'})
+
 
 /***
  * Scheduler handler for bot to be used with PM2
@@ -10,6 +13,6 @@ schedule.scheduleJob("0 * * * *", async function () {
     try {
         await checkAndBlock();
     } catch (error) {
-        console.log(`Error applying sunblock. Error: ${error}.\n\nTrying again in 10s.`)
+        scheduleLogger.info(`Error applying sunblock. Error: ${error}.\n\nTrying again in 10s.`)
     }
 });
