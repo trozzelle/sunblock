@@ -76,5 +76,3 @@ export interface ExceedsMaxFollowCountResult {
     exceedsMax: boolean,
     followingCount: number,
 }
-
-

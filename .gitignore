@@ -209,4 +209,4 @@ dist
 .pnp.*
 
 # SQLite
-*.sqlite
+/src/adhoc.ts
