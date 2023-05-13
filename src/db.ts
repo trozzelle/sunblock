@@ -1,6 +1,7 @@
 import {Database, open} from 'sqlite';
 import sqlite3 from 'sqlite3';
-import logger from "./logger";
+import {FollowerRecord, SubscribedBlockRecord, Did} from "./types";
+import logger from "./logger.js";
 
 const dbLogger = logger.child({module: 'db.ts'})
 
@@ -25,16 +26,8 @@ async function createTables(): Promise<void> {
     }
 }
 
-interface Follower {
-    did: string,
-    handle: string,
-    following_count: number,
-    block_status: number,
-    date_last_updated: string
-}
-
 // Insert single follower into the followers table
-async function insertFollower({did, handle, following_count, block_status, date_last_updated}: Follower) {
+async function insertFollower({did, handle, following_count, block_status, date_last_updated}: FollowerRecord) {
     try {
         const db = await dbPromise
         await db.run('INSERT INTO followers(did, handle, following_count, block_status, date_last_updated) VALUES (?, ?, ?, ?, ?)', [did, handle, following_count, block_status, date_last_updated])
@@ -44,7 +37,7 @@ async function insertFollower({did, handle, following_count, block_status, date_
 }
 
 // Update single follower in the followers table
-async function updateFollower({did, handle, following_count, block_status, date_last_updated}: Follower) {
+async function updateFollower({did, handle, following_count, block_status, date_last_updated}: FollowerRecord) {
     try {
         const db = await dbPromise
         await db.run('UPDATE followers SET handle = ?, following_count = ?, block_status = ?, date_last_updated = ? WHERE did = ?', [handle, following_count, block_status, date_last_updated, did])
@@ -54,7 +47,7 @@ async function updateFollower({did, handle, following_count, block_status, date_
 }
 
 // Retrieve single follower from  the followers table
-async function getFollower(did: string){
+async function getFollower(did: Did){
     try {
         const db = await dbPromise
         return await db.get('SELECT * FROM followers WHERE did = ?', did)
@@ -73,14 +66,9 @@ async function getAllFollowers() {
     }
 }
 
-interface SubscribedBlock {
-    blocked_did: string;
-    subscribed_did: string;
-    date_last_updated: string;
-}
 
 // Insert single block into subscriptions block table
-async function insertSubscriptionBlock({blocked_did, subscribed_did, date_last_updated}: SubscribedBlock): Promise<void> {
+async function insertSubscriptionBlock({blocked_did, subscribed_did, date_last_updated}: SubscribedBlockRecord) {
     try {
         const db = await dbPromise;
         await db.run('INSERT INTO subscriptionBlocks(did, subscribed_did, reason, date_last_updated) VALUES (?, ?, ?, ?)', [blocked_did, subscribed_did, 'subscription', date_last_updated]);
@@ -90,7 +78,7 @@ async function insertSubscriptionBlock({blocked_did, subscribed_did, date_last_u
 }
 
 // Get single block from subscription
-async function getSingleSubscriptionBlocks(subscribed_did: string): Promise<any> {
+async function getSingleSubscriptionBlocks(subscribed_did: Did) {
     try {
         const db = await dbPromise;
         return await db.all(`SELECT did FROM subscriptionBlocks WHERE subscribed_did = '${subscribed_did}'`);
@@ -100,7 +88,7 @@ async function getSingleSubscriptionBlocks(subscribed_did: string): Promise<any>
 }
 
 // Get all blocks in the subscription blocks table
-async function getAllSubscriptionBlocks(): Promise<any> {
+async function getAllSubscriptionBlocks() {
     try {
         const db = await dbPromise;
         return await db.all('SELECT did FROM subscriptionBlocks');
@@ -110,7 +98,7 @@ async function getAllSubscriptionBlocks(): Promise<any> {
 }
 
 // Delete single block in the subscriptions block table
-async function deleteSubscriptionBlock(did:string) {
+async function deleteSubscriptionBlock(did:Did) {
     try {
         const db = await dbPromise
         await db.run(`DELETE FROM subscriptionBlocks WHERE did = '${did}'`)
@@ -130,7 +118,7 @@ interface UserBlock {
 }
 
 // Delete single block in the user's local block table
-async function insertUserBlock({did, handle, rkey, reason, date_blocked, date_last_updated}: UserBlock): Promise<void> {
+async function insertUserBlock({did, handle, rkey, reason, date_blocked, date_last_updated}: UserBlock) {
     try {
         const db = await dbPromise;
         await db.run('INSERT INTO blocks(did, handle, r_key, reason, date_blocked, date_last_updated) VALUES (?, ?, ?, ?, ?, ?)', [did, handle, rkey, reason, date_blocked, date_last_updated]);
@@ -140,7 +128,7 @@ async function insertUserBlock({did, handle, rkey, reason, date_blocked, date_la
 }
 
 // Get single block from the user's local block table
-async function getUserBlock(did: string) {
+async function getUserBlock(did: Did) {
     try{
         const db = await dbPromise
         return await db.get(`SELECT * FROM blocks where did = '${did}'`)
@@ -150,7 +138,7 @@ async function getUserBlock(did: string) {
 }
 
 // Delete single block in the user's local block table
-async function deleteUserBlock(did: string) {
+async function deleteUserBlock(did: Did) {
     try{
         const db = await dbPromise
         await db.run(`DELETE FROM blocks WHERE did = '${did}'`)
@@ -160,10 +148,30 @@ async function deleteUserBlock(did: string) {
 }
 
 // Get all blocks from the user's local block table
-async function getAllUserBlocks(): Promise<any> {
+async function getAllUserBlocks(){
     try {
         const db = await dbPromise;
         return await db.all('SELECT did FROM blocks');
+    } catch (error) {
+        dbLogger.error(`Error in getAllBlocks: ${error.message}`);
+    }
+}
+
+// Get all blocks from the user's local block table
+async function getAllUserBlocksByReason(reason: string | string[]){
+
+    let reasons
+
+    if (Array.isArray(reason)) {
+        reasons = reason.join(`', '`)
+    }
+        else {
+            reasons = reason
+    }
+
+    try {
+        const db = await dbPromise;
+        return await db.all(`SELECT * FROM blocks WHERE reason IN ('${reasons}')`);
     } catch (error) {
         dbLogger.error(`Error in getAllBlocks: ${error.message}`);
     }
@@ -192,7 +200,7 @@ async function getAllSubscriptions() {
 }
 
 // Check whether a did is in the provided table
-async function checkBlockExists(did, table) {
+async function checkBlockExists(did: Did, table: string) {
     try {
         const db = await dbPromise
         const result = await db.get(`SELECT COUNT(*) as count FROM ${table} WHERE did = '${did}'`)
@@ -203,4 +211,4 @@ async function checkBlockExists(did, table) {
 }
 
 
-export {dbPromise, createTables, insertFollower, updateFollower, getFollower, getAllFollowers, getUniqueDids, insertSubscriptionBlock, insertUserBlock, deleteUserBlock, deleteSubscriptionBlock, getUserBlock, getAllUserBlocks, getSingleSubscriptionBlocks, getAllSubscriptionBlocks, getAllSubscriptions, checkBlockExists}
+export {dbPromise, createTables, insertFollower, updateFollower, getFollower, getAllFollowers, getUniqueDids, insertSubscriptionBlock, insertUserBlock, deleteUserBlock, deleteSubscriptionBlock, getUserBlock, getAllUserBlocks, getAllUserBlocksByReason, getSingleSubscriptionBlocks, getAllSubscriptionBlocks, getAllSubscriptions, checkBlockExists}

@@ -1,16 +1,15 @@
 import bsky, {
     BskyAgent,
     AppBskyActorGetProfile,
-    AppBskyGraphBlock,
     AppBskyGraphGetFollowers,
     ComAtprotoRepoListRecords,
-    AppBskyGraphFollow, AppBskyActorDefs
 } from "@atproto/api";
 import axios, {AxiosResponse} from "axios";
 import process from "node:process";
 import dotenv from 'dotenv';
-import logger from "./logger";
+import logger from "./logger.js";
 const {BskyAgent} = bsky;
+import {Block, Follower, Did} from "./types";
 
 const apiLogger = logger.child({module: 'api.ts'})
 
@@ -18,72 +17,86 @@ const apiLogger = logger.child({module: 'api.ts'})
 dotenv.config();
 
 const apiUser = process.env.ATPROTO_USER as string
-
+const apiPass = process.env.ATPROTO_PASS as string
 const baseUrl = "https://bsky.social"
 
-interface Blocks extends Array<ComAtprotoRepoListRecords.Record>{}
-interface Followers extends Array<AppBskyActorDefs.ProfileView>{}
 
 async function authenticateBsky(): Promise<BskyAgent> {
     const agent = new BskyAgent({
         service: baseUrl,
     });
     await agent.login({
-        identifier: process.env.ATPROTO_USER,
-        password: process.env.ATPROTO_PASS,
+        identifier: apiUser,
+        password: apiPass,
     });
     return agent;
 }
 
+//
+// Get the count of accounts a user is following
+async function getProfile(agent: BskyAgent, did: Did) {
+
+    try {
+        const profile: AppBskyActorGetProfile.Response = await agent.getProfile({actor:did})
+        return profile;
+    } catch (error) {
+        apiLogger.error(`Error in getFollowing: ${error.message}`);
+    }
+}
+
+// Gets all followers of the calling user
 async function getFollowers(agent: BskyAgent) {
-    let allFollowers: Followers = [];
+    let allFollowers: Follower[] = [];
     let nextCursor;
 
     try {
         do {
             const response: AppBskyGraphGetFollowers.Response = await agent.getFollowers({ actor: apiUser, cursor: nextCursor });
-            allFollowers = allFollowers.concat(response.data.followers);
+            // @ts-ignore
+            allFollowers = allFollowers.concat(response.data.followers); //TODO fix type
             nextCursor = response.data.cursor;
         } while (nextCursor);
 
         return allFollowers;
     } catch (error) {
-        console.error(`Error in getFollowers: ${error.message}`);
+        apiLogger.error(`Error in getFollowers: ${error.message}`);
     }
 }
 
-async function getFollowingCount(agent: BskyAgent, did: string) {
+// Get the count of accounts a user is following
+async function getFollowingCount(agent: BskyAgent, did: Did) {
 
     try {
         const profile: AppBskyActorGetProfile.Response = await agent.getProfile({actor:did})
-        console.dir(profile)
         return profile.data.followsCount;
     } catch (error) {
-        console.error(`Error in getFollowing: ${error.message}`);
+        apiLogger.error(`Error in getFollowing: ${error.message}`);
     }
 }
 
-async function getBlocks (agent: BskyAgent, did: string) {
+// Get a user's blocks
+async function getBlocks (agent: BskyAgent, did: Did) {
 
-    let blocks: Blocks = [];
+    let blocks: Block[] = [];
     let nextCursor;
 
     try {
         do {
             const response: ComAtprotoRepoListRecords.Response = await agent.com.atproto.repo.listRecords({repo: did, collection: 'app.bsky.graph.block', cursor:nextCursor})
-
-            blocks = blocks.concat(response.data.records);
+            // @ts-ignore
+            blocks = blocks.concat(response.data.records); //TODO Fix types
             nextCursor = response.data.cursor;
         } while (nextCursor);
 
         return blocks
     } catch(error) {
-        console.error(`Error getting block list: ${error.message}`)
+        apiLogger.error(`Error getting block list: ${error.message}`)
     }
 
 }
 
-async function createBlock(agent: BskyAgent, did: string) {
+// Creates a single block
+async function createBlock(agent: BskyAgent, did: Did) {
 
     const params = {
         collection: "app.bsky.graph.block",
@@ -92,10 +105,10 @@ async function createBlock(agent: BskyAgent, did: string) {
             createdAt: new Date().toISOString(),
             subject: did
         },
-        repo: agent.session!.did
+        repo: agent.session.did
     }
 
-    const accessToken = agent.session!.accessJwt
+    const accessToken = agent.session.accessJwt
     const blockEndpoint = baseUrl + "/xrpc/com.atproto.repo.createRecord"
 
     try {
@@ -106,11 +119,12 @@ async function createBlock(agent: BskyAgent, did: string) {
         });
         return response;
     } catch (error) {
-        console.error(`Error in createBlock: ${error.message}`);
+        apiLogger.error(`Error in createBlock: ${error.message}`);
     }
 }
 
-async function deleteBlock(agent: BskyAgent, did: string, rkey: string) {
+// Deletes a single block
+async function deleteBlock(agent: BskyAgent, did: Did, rkey: string) {
 
     const params = {
         collection: "app.bsky.graph.block",
@@ -129,8 +143,8 @@ async function deleteBlock(agent: BskyAgent, did: string, rkey: string) {
         });
         return response;
     } catch (error) {
-        console.error(`Error in createBlock: ${error.message}`);
+        apiLogger.error(`Error in createBlock: ${error.message}`);
     }
 }
 
-export { authenticateBsky, getFollowers, getFollowingCount, getBlocks, createBlock, deleteBlock };
+export { authenticateBsky, getProfile, getFollowers, getFollowingCount, getBlocks, createBlock, deleteBlock };

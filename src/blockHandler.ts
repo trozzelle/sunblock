@@ -1,11 +1,12 @@
-import {BskyAgent, ComAtprotoRepoListRecords} from "@atproto/api";
-import {createBlock, deleteBlock, getBlocks, getFollowers, getFollowingCount} from "./api.js";
+import bsky, { AtpAgent, BskyAgent} from "@atproto/api";
+import {createBlock, deleteBlock, getBlocks, getProfile, getFollowers, getFollowingCount} from "./api.js";
 import {
     checkBlockExists,
     deleteSubscriptionBlock,
     deleteUserBlock,
     getAllSubscriptionBlocks,
     getAllUserBlocks,
+    getAllUserBlocksByReason,
     getFollower,
     getSingleSubscriptionBlocks,
     getUserBlock,
@@ -15,78 +16,113 @@ import {
     insertUserBlock,
     updateFollower
 } from "./db.js";
-import logger from "./logger";
+import {Block, BlockRecord, Follower, FollowerRow, Uri, Did, ExceedsMaxFollowCountResult} from "./types";
+import logger from "./logger.js";
 
 const blockLogger = logger.child({module: 'blockHandler.ts'})
 
+async function exceedsMaxFollowCount(agent: BskyAgent, did: Did, followLimit: number | string ): Promise<ExceedsMaxFollowCountResult> {
 
-interface Blocks extends Array<ComAtprotoRepoListRecords.Record>{}
-
-async function exceedsMaxFollowCount(agent: BskyAgent, did: string, followLimit: string | number ): Promise({exceedsMax: boolean, followingCount: number}) {
-
-    const followingCount = await getFollowingCount(agent, did);
+    let followingCount = await getFollowingCount(agent, did);
+    // If followingCount is undefined, we default to zero to be safe.
+    if(!followingCount) {followingCount = 0}
     const exceedsMax = followingCount > followLimit
 
     return {exceedsMax, followingCount}
 }
 
-async function userBlockExists(did: string): Promise<Boolean> {
+async function userBlockExists(did: Did): Promise<boolean> {
 
     const blockExists = await checkBlockExists(did, 'blocks')
     return blockExists > 0
 
 }
 
-async function parseKeyFromURI (uri: string): Promise<String> {
+async function parseKeyFromURI (uri: Uri): Promise<string> {
 
-        // Needs some guard rails
+        // We split the uri by / to get parts and take the
+        // last element. We throw an error if the uri
+        // doesn't smell like a uri
         const parts = uri.split('/')
+        if(parts.length !== 5) throw new Error("at uri is malformatted. Cannot extract key.")
+        if(parts[0] !== 'at:') throw new Error("uri does not begin with at:. Treating as malformatted and skipping.")
 
         return parts[parts.length - 1]
 
 }
 
-async function syncRepoUserBlockList(agent: BskyAgent, did: string) {
+async function syncRepoUserBlockList(agent: BskyAgent, did: Did) {
 
-    const repoUserBlocks = await getBlocks(agent, did)
+    const repoUserBlocks: Block[] = await getBlocks(agent, did)
     const allUserBlocks = await getAllUserBlocks()
+    if(!allUserBlocks) throw new Error("User blocks missing or corrupted in database")
+
+    const repoUserBlocksSet = new Set(repoUserBlocks.map(block => block.value.subject))
     const allUserBlocksSet = new Set(allUserBlocks.map(block => block.did))
 
     try {
-        if (repoUserBlocks.length > 0) {
+        if (repoUserBlocks && repoUserBlocks.length > 0) {
 
-            console.log(`Repo has ${repoUserBlocks.length} blocks`)
+            blockLogger.info(`Repo has ${repoUserBlocks.length} blocks`)
+
             for (const block of repoUserBlocks) {
-                if (!allUserBlocksSet.has(block.value.subject)) {
+                 const record = block.value as BlockRecord
 
-                    console.log(`Repo block at ${block.uri} does not exist in the local block list.`)
-                    const rkey = await parseKeyFromURI(block.uri)
-                    const profile = await agent.getProfile({actor: block.value.subject})
-                    await insertUserBlock({
-                        did: block.value.subject,
-                        handle: profile.data.handle,
-                        rkey: rkey,
-                        reason: 'manual',
-                        date_blocked: block.value.createdAt,
-                        date_last_updated: new Date().toISOString()
-                    })
-                    console.log(`${block.value.subject} blocked.`)
+                if(record.subject) {
+                    if (!allUserBlocksSet.has(record.subject)) {
+
+                        blockLogger.info(`Repo block at ${block.uri} does not exist in the local block list.`)
+
+                        const rkey = await parseKeyFromURI(block.uri)
+                        try {
+                            const profile = await agent.getProfile({actor: record.subject})
+                            // const profile = await getProfile(agent, record.subject)
+
+                            await insertUserBlock({
+                                did: record.subject,
+                                handle: profile.data.handle,
+                                rkey: rkey,
+                                reason: 'manual',
+                                date_blocked: record.createdAt,
+                                date_last_updated: new Date().toISOString()
+                            })
+                            blockLogger.info(`${record.subject} blocked.`)
+                        } catch (error) {
+                            blockLogger.error(`Unable to insert with error: ${error}`)
+                        }
+                    }
+                }
+            }
+
+
+        }
+        const allUserManualBlocks = await getAllUserBlocksByReason('manual')
+        const allUserManualBlockSet = new Set(allUserManualBlocks.map(block => block.did ))
+        // This might be broken
+        for (const block of allUserManualBlockSet) {
+
+            if(!repoUserBlocksSet.has(block)) {
+                try {
+                    logger.info(`${block}`)
+                    await deleteUserBlock(block)
+                } catch (error) {
+                    logger.error(`Error removing orphan block from local block list. Error: ${error}`)
                 }
             }
         }
     } catch(error) {
-        console.error(`Error syncing with user repo: ${error}`)
+        blockLogger.error(`Error syncing with user repo: ${error}`)
     }
 }
 
 async function syncUserBlockList(agent: BskyAgent) {
 
-    console.log('Starting user block list sync...')
+    blockLogger.info('Starting user block list sync...')
 
     const uniqueSubscribedBlocks = await getUniqueDids('subscriptionBlocks', 'blocks')
     const orphanedUserBlocks = await getUniqueDids('blocks', 'subscriptionBlocks')
 
-    console.log(`${uniqueSubscribedBlocks.length} new blocks from subscriptions. ${orphanedUserBlocks.length} orphaned blocks to unblock.`)
+    blockLogger.info(`${uniqueSubscribedBlocks.length} new blocks from subscriptions. ${orphanedUserBlocks.length} orphaned blocks to unblock.`)
 
     if(uniqueSubscribedBlocks.length > 0) {
         for (const block of uniqueSubscribedBlocks) {
@@ -104,10 +140,10 @@ async function syncUserBlockList(agent: BskyAgent) {
                     date_blocked: new Date().toISOString(),
                     date_last_updated: new Date().toISOString()} )
 
-                console.log(`${block.did} blocked`)
+                blockLogger.info(`${block.did} blocked`)
 
             } catch (error) {
-                console.error(`Unable to process blocking for ${block.did}: ${error}`)
+                blockLogger.error(`Unable to process blocking for ${block.did}: ${error}`)
             }
         }
     }
@@ -118,12 +154,12 @@ async function syncUserBlockList(agent: BskyAgent) {
                 const record = await getUserBlock(block.did)
                 const response = await deleteBlock(agent, block.did, record.r_key)
 
-                if (response.status == '200') {
+                if (response.status == 200) {
                     await deleteUserBlock(block.did)
-                    console.log(`Deleted block for ${record.did}`)
+                    blockLogger.info(`Deleted block for ${record.did}`)
                 }
             } catch(error) {
-                console.error('')
+                blockLogger.error('')
             }
         }
     }
@@ -132,49 +168,59 @@ async function syncUserBlockList(agent: BskyAgent) {
 
 async function blockSubscriptions(agent: BskyAgent, subscriptionsList: string) {
 
-    const subscriptions = subscriptionsList.split(',')
+    let subscriptions = []
 
-    console.log(`Retrieving blocks for the following users: ${subscriptions}`)
+    if(subscriptionsList) {
+        subscriptions = subscriptionsList.split(',')
+    }
+
+    blockLogger.info(`Retrieving blocks for the following users: ${subscriptions}`)
 
     try {
         const newSubscriptionDidsSet = new Set();
         const allSubscriptionBlocksCurrent = await getAllSubscriptionBlocks()
 
-        for (const handle of subscriptions) {
+        if(subscriptions) {
+            for (const handle of subscriptions) {
 
-            console.log(`Requesting block list from user ${handle}`)
+                blockLogger.info(`Requesting block list from user ${handle}`)
 
-            const {data: {did: subscriptionDid}} = await agent.resolveHandle({handle: handle});
-            const subscriptionBlocksNew: Blocks = await getBlocks(agent, subscriptionDid);
+                const {data: {did: subscriptionDid}} = await agent.resolveHandle({handle: handle});
+                const subscriptionBlocksNew: Block[] = await getBlocks(agent, subscriptionDid);
 
-            if(!subscriptionBlocksNew) {
-                throw Error
-            }
+                if (!subscriptionBlocksNew) {
+                    throw Error
+                }
 
-            console.log(`Received block list of ${subscriptionBlocksNew.length} entries`)
-            console.log(`Retrieving all subscribed block lists from the database`)
+                blockLogger.info(`Received block list of ${subscriptionBlocksNew.length} entries`)
+                blockLogger.info(`Retrieving all subscribed block lists from the database`)
 
-            const subscriptionBlocksCurrent = await getSingleSubscriptionBlocks(subscriptionDid)
-            const subscriptionBlocksCurrentSet = new Set(subscriptionBlocksCurrent.map(block => block.did))
+                const subscriptionBlocksCurrent = await getSingleSubscriptionBlocks(subscriptionDid)
+                const subscriptionBlocksCurrentSet = new Set(subscriptionBlocksCurrent.map(block => block.did))
 
-            console.log(`Retrieved ${subscriptionBlocksCurrentSet.size} blocks from the database.`)
+                blockLogger.info(`Retrieved ${subscriptionBlocksCurrentSet.size} blocks from the database.`)
 
-            for (const block of subscriptionBlocksNew) {
+                for (const block of subscriptionBlocksNew) {
 
-                const blockDid = block.value.subject
-                newSubscriptionDidsSet.add(blockDid)
+                    const blockDid = block.value.subject
+                    newSubscriptionDidsSet.add(blockDid)
 
-                try {
-                    const date_last_updated = new Date().toISOString();
+                    try {
+                        const date_last_updated = new Date().toISOString();
 
-                    if (!subscriptionBlocksCurrentSet.has(blockDid)) {
-                        await insertSubscriptionBlock({blocked_did: blockDid, subscribed_did: subscriptionDid, date_last_updated});
-                        console.log(`${blockDid} inserted into subscriptionBlock`)
-                    } else {
-                        console.log(`${blockDid} already exists in block list for ${handle}. Skipping insert.`)
+                        if (!subscriptionBlocksCurrentSet.has(blockDid)) {
+                            await insertSubscriptionBlock({
+                                blocked_did: blockDid,
+                                subscribed_did: subscriptionDid,
+                                date_last_updated
+                            });
+                            blockLogger.info(`${blockDid} inserted into subscriptionBlock`)
+                        } else {
+                            blockLogger.info(`${blockDid} already exists in block list for ${handle}. Skipping insert.`)
+                        }
+                    } catch (error) {
+                        blockLogger.error(`Error adding subscription block for user: ${error.message}`);
                     }
-                } catch (error) {
-                    console.error(`Error adding subscription block for user: ${error.message}`);
                 }
             }
         }
@@ -182,15 +228,15 @@ async function blockSubscriptions(agent: BskyAgent, subscriptionsList: string) {
         for (const block of allSubscriptionBlocksCurrent) {
             if(!newSubscriptionDidsSet.has(block.did)) {
                 await deleteSubscriptionBlock(block.did)
-                console.log(`Removed ${block.did} from subscriptionBlocks as it no longer appears in any subscription lists`)
+                blockLogger.info(`Removed ${block.did} from subscriptionBlocks as it no longer appears in any subscription lists`)
             }
         }
     } catch (error) {
-        console.error(`Error running blockSubscriptions: ${error.message}`);
+        blockLogger.error(`Error running blockSubscriptions: ${error.message}`);
     }
 }
 
-async function blockSpam(agent: BskyAgent, db: any, followLimit: number): Promise<void> {
+async function blockSpam(agent: BskyAgent, db: any, followLimit: string | number): Promise<void> {
 
     try {
         const followers = await getFollowers(agent);
@@ -200,7 +246,6 @@ async function blockSpam(agent: BskyAgent, db: any, followLimit: number): Promis
         }
 
         for (const follower of followers) {
-
             let followerRow = await getFollower(follower.did)
 
             if (!followerRow) {
@@ -210,8 +255,9 @@ async function blockSpam(agent: BskyAgent, db: any, followLimit: number): Promis
                     following_count: 0,
                     block_status: 0,
                     date_last_updated: new Date().toISOString(),
-                };
-                await insertFollower({did: follower.did, handle: follower.handle, following_count: follower.following_count, block_status: follower.block_status, date_last_updated: new Date().toISOString()})
+                } as FollowerRow;
+
+                await insertFollower({did: followerRow.did, handle: followerRow.handle, following_count: followerRow.following_count, block_status: followerRow.block_status, date_last_updated: new Date().toISOString()})
             }
 
             const { exceedsMax, followingCount } = await exceedsMaxFollowCount(agent, follower.did, followLimit)
@@ -219,7 +265,7 @@ async function blockSpam(agent: BskyAgent, db: any, followLimit: number): Promis
             // @ts-ignore
             if (exceedsMax) {
 
-                console.log(`Blocking ${follower.handle} who is following ${followingCount} users.`)
+                blockLogger.info(`Blocking ${follower.handle} who is following ${followingCount} users.`)
                 const blockExists = await userBlockExists(follower.did)
 
                 if(!blockExists) {
@@ -233,18 +279,18 @@ async function blockSpam(agent: BskyAgent, db: any, followLimit: number): Promis
                         date_blocked: new Date().toISOString(),
                         date_last_updated: new Date().toISOString()
                     })
-                    console.log(`Blocked ${follower.handle}.`)
+                    blockLogger.info(`Blocked ${follower.handle}.`)
                 } else {
-                    console.log(`${follower.handle} is already in block list. Updating followers table then continuing.`)
+                    blockLogger.info(`${follower.handle} is already in block list. Updating followers table then continuing.`)
                 }
                 await updateFollower({did:follower.did, handle: follower.handle, following_count: followingCount, block_status: 1, date_last_updated: new Date().toISOString()})
             } else {
-                console.log(`Doing nothing with ${follower.handle} who is following ${followingCount} users.`)
+                blockLogger.info(`Doing nothing with ${follower.handle} who is following ${followingCount} users.`)
                 await updateFollower({did:follower.did, handle: follower.handle, following_count: followingCount, block_status: 0, date_last_updated: new Date().toISOString()})
             }
         }
     } catch (error) {
-        console.error(`Error running spam blocker: ${error.message}`);
+        blockLogger.error(`Error running spam blocker: ${error.message}`);
     }
 }
 

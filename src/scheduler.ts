@@ -1,6 +1,6 @@
 import schedule from "node-schedule";
 import { checkAndBlock } from "./sunblock.js";
-import logger from "./logger";
+import logger from "./logger.js";
 const scheduleLogger = logger.child({module: 'scheduler.ts'})
 
 

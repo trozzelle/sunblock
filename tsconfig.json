@@ -3,25 +3,13 @@
     /* Visit https://aka.ms/tsconfig to read more about this file */
     "outDir": "dist",
     "sourceMap": true,
-
-
     /* Language and Environment */
     "target": "es2022",                                  /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */
-
-
-    /* Modules */
-    "module": "es2022",                                /* Specify what module code is generated. */
-    // "rootDir": "./",                                  /* Specify the root folder within your source files. */
-    "moduleResolution": "node",                     /* Specify how TypeScript looks up a file from a given module specifier. */
-
     "module": "esnext",
     "moduleResolution": "node",
     "forceConsistentCasingInFileNames": true,            /* Ensure that casing is correct in imports. */
-
     /* Type Checking */
-    "strict": true,                                      /* Enable all strict type-checking options. */
-    "noImplicitAny": false,                            /* Enable error reporting for expressions and declarations with an implied 'any' type. */
-
+    //    "noImplicitAny": false,                            /* Enable error reporting for expressions and declarations with an implied 'any' type. */
     "skipLibCheck": true,
     /* Skip type checking all .d.ts files. */
     "allowSyntheticDefaultImports": true,

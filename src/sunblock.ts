@@ -7,7 +7,9 @@ import {
 import {authenticateBsky} from "./api.js";
 import {blockSpam, blockSubscriptions, syncUserBlockList, syncRepoUserBlockList} from "./blockHandler.js";
 import sqlite3 from "sqlite3";
-import logger from "./logger";
+import logger from "./logger.js";
+import {Did} from "./types";
+
 const res = dotenv.config();
 
 const mainLogger = logger.child({module: 'sunblock'})
@@ -24,43 +26,40 @@ sqlite3.verbose()
 
 export async function checkAndBlock(): Promise<void> {
 
-    console.log("Starting check and block...")
+    mainLogger.info("Starting check and block...")
 
     const agent = await authenticateBsky()
-    console.log("Authenticated with Bluesky.")
+    mainLogger.info("Authenticated with Bluesky.")
 
     if(!agent.session) {
-        throw Error
+        throw Error("Session is missing. Something has gone wrong.")
     }
 
     const db = await dbPromise;
     await createTables();
 
-    console.log("Database opened.")
+    mainLogger.info("Database opened.")
 
     try {
+        const user = agent.session.did as Did
         await blockSpam(agent, db, followLimit)
-
         if (subscriptions) {
             try {
                 await blockSubscriptions(agent, subscriptions)
             } catch (error) {
-                console.error(`Error running blocks subscription: ${error.message}`);
+                mainLogger.error(`Error running blocks subscription: ${error.message}`);
             }
         }
-
         await syncUserBlockList(agent)
-
-        const user = agent.session.did
         await syncRepoUserBlockList(agent, user)
 
     } catch (error) {
-        console.error(`Error running spam blocker: ${error.message}`);
+        mainLogger.error(`Error running spam blocker: ${error.message}`);
     }
 
 
 
-    console.log("Completed run. Exiting.")
+    mainLogger.info("Completed run. Exiting.")
 }
 
 checkAndBlock()
@@ -68,7 +67,7 @@ checkAndBlock()
 async function cleanUpAndExit() {
     const db = await dbPromise;
     await db.close();
-    console.log('Database connection closed.');
+    mainLogger.info('Database connection closed.');
     process.exit();
 }
 

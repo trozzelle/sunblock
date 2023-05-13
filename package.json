@@ -1,7 +1,7 @@
 {
   "name": "sunblock",
   "version": "1.0.0",
-  "description": "",
+  "description": "Block list management for Bluesky",
   "main": "dist/sunblock.js",
   "type": "module",
   "scripts": {
@@ -13,9 +13,10 @@
     "format": "prettier --write 'src/**/*.{js,jsx,ts,tsx,css,md,json}' --config .prettierrc.json"
   },
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "@atproto/api": "^0.2.11",
+    "@oclif/core": "^2.8.5",
     "@types/axios": "^0.14.0",
     "@types/dotenv": "^8.2.0",
     "@types/node": "^20.1.2",
@@ -23,6 +24,7 @@
     "dotenv": "^16.0.3",
     "node-schedule": "^2.1.1",
     "pino": "^8.14.1",
+    "pino-pretty": "^10.0.0",
     "sqlite": "^4.2.0",
     "sqlite3": "^5.1.6",
     "ts-node": "^10.9.1",
