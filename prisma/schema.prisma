@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:../db.sqlite"
+}
+
+model Blocks {
+  did               String @id @unique
+  handle            String
+  rKey             String
+  reason            String
+  dateBlocked      String
+  dateLastUpdated String
+
+}
+
+model Followers {
+  follower          String @id @unique
+  handle            String
+  followingCount   Int
+  blockStatus      Int
+  dateLastUpdated String
+
+}
+
+model SubscriptionBlocks {
+  did               String
+  author            String
+  reason            String
+  dateLastUpdated String
+
+  @@id([author, did])
+}
+
+model Subscriptions {
+  author            String @id @unique
+  handle            String
+  blockCount       Int
+  dateAdded        String
+  dateLastUpdated String
+
+}

@@ -1,11 +1,14 @@
 import {Database, open} from 'sqlite';
 import sqlite3 from 'sqlite3';
 import {FollowerRecord, SubscribedBlockRecord, Did} from "./types";
+import { PrismaClient } from '@prisma/client'
 import logger from "./logger.js";
 
 const dbLogger = logger.child({module: 'db.ts'})
 
 sqlite3.verbose()
+
+const prisma = new PrismaClient()
 
 // Open or create db
 const dbPromise: Promise<Database> = open({
