@@ -8,7 +8,27 @@ const dbLogger = logger.child({module: 'db.ts'})
 
 sqlite3.verbose()
 
-const prisma = new PrismaClient()
+
+// For debugging, log Prisma to console
+const prisma = new PrismaClient({
+    log: [
+        { level: 'warn', emit: 'event' },
+        { level: 'info', emit: 'event' },
+        { level: 'error', emit: 'event' },
+    ],
+})
+
+prisma.$on('warn', (e) => {
+    console.log(e)
+})
+
+prisma.$on('info', (e) => {
+    console.log(e)
+})
+
+prisma.$on('error', (e) => {
+    console.log(e)
+})
 
 // Open or create db
 const dbPromise: Promise<Database> = open({
@@ -26,6 +46,23 @@ async function createTables(): Promise<void> {
         await db.run('CREATE TABLE IF NOT EXISTS blocks(did text PRIMARY KEY, handle TEXT, r_key TEXT, reason TEXT, date_blocked TEXT, date_last_updated TEXT)')
     } catch (error) {
         dbLogger.error(`Error in createTable: ${error.message}`);
+    }
+}
+
+async function insertFollowersPrisma({did, handle, following_count, block_status, date_last_updated}: FollowerRecord){
+    try {
+        const follower = await prisma.followers.create({
+            data: {
+                follower: did,
+                handle: handle,
+                followingCount: following_count,
+                blockStatus: block_status,
+                dateLastUpdated: date_last_updated
+            }
+        })
+        return follower
+    } catch (error) {
+        console.error(`Error in ... ${error.message}`)
     }
 }
 
@@ -81,6 +118,7 @@ async function insertSubscriptionBlock({blocked_did, subscribed_did, date_last_u
 }
 
 // Get single block from subscription
+// TODO double-check this...
 async function getSingleSubscriptionBlocks(subscribed_did: Did) {
     try {
         const db = await dbPromise;
@@ -214,4 +252,4 @@ async function checkBlockExists(did: Did, table: string) {
 }
 
 
-export {dbPromise, createTables, insertFollower, updateFollower, getFollower, getAllFollowers, getUniqueDids, insertSubscriptionBlock, insertUserBlock, deleteUserBlock, deleteSubscriptionBlock, getUserBlock, getAllUserBlocks, getAllUserBlocksByReason, getSingleSubscriptionBlocks, getAllSubscriptionBlocks, getAllSubscriptions, checkBlockExists}
+export {dbPromise, createTables, insertFollower, insertFollowersPrisma, updateFollower, getFollower, getAllFollowers, getUniqueDids, insertSubscriptionBlock, insertUserBlock, deleteUserBlock, deleteSubscriptionBlock, getUserBlock, getAllUserBlocks, getAllUserBlocksByReason, getSingleSubscriptionBlocks, getAllSubscriptionBlocks, getAllSubscriptions, checkBlockExists}

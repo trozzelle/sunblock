@@ -28,7 +28,7 @@ export interface Block {
 }
 
 export interface BlockRecord {
-    '$type': string,
+    $type: string,
     subject: string,
     createdAt: string,
 }
@@ -36,9 +36,9 @@ export interface BlockRecord {
 export interface FollowerRow {
     did: Did,
     handle: Handle,
-    following_count: number,
-    block_status: number,
-    date_last_updated: string
+    followingCount: number,
+    isBlocked: number,
+    updatedAt: string
 }
 
 export interface Follower {
@@ -61,15 +61,15 @@ export interface FollowerView {
 export interface FollowerRecord {
     did: Did,
     handle: Handle,
-    following_count: number,
-    block_status: number,
-    date_last_updated: string
+    followingCount: number,
+    isBlocked?: boolean,
+    updatedAt?: string
 }
 
 export interface SubscribedBlockRecord {
     blocked_did: string;
     subscribed_did: string;
-    date_last_updated: string;
+    updatedAt: string;
 }
 
 export interface ExceedsMaxFollowCountResult {

@@ -1,21 +1,26 @@
 import { BskyAgent} from "@atproto/api";
 import {createBlock, deleteBlock, getBlocks, getFollowers, getFollowingCount} from "./api.js";
 import {
-    checkBlockExists,
-    deleteSubscriptionBlock,
-    deleteUserBlock,
-    getAllSubscriptionBlocks,
-    getAllUserBlocks,
-    getAllUserBlocksByReason,
-    getFollower,
-    getSingleSubscriptionBlocks,
-    getUserBlock,
-    getUniqueDids,
-    insertFollower,
-    insertSubscriptionBlock,
-    insertUserBlock,
-    updateFollower
+    // checkBlockExists,
+    // deleteSubscriptionBlock,
+    // deleteUserBlock,
+    // getAllSubscriptionBlocks,
+    // getAllUserBlocks,
+    // getAllUserBlocksByReason,
+    // // getFollower,
+    // getSingleSubscriptionBlocks,
+    // getUserBlock,
+    // getUniqueDids,
+    // // insertFollower,
+    // // insertFollowersPrisma,
+    // insertSubscriptionBlock,
+    // insertUserBlock,
+    // updateFollower
 } from "./db.js";
+import {createSingleUser, getSingleUser, insertSingleFollower, updateSingleFollower, getSingleFollower,
+    getAllFollowers, getUniqueDids, insertSingleSubscriptionBlock, insertSingleUserBlock, deleteSingleUserBlock,
+    deleteSingleSubscriptionBlock, getSingleUserBlock, getAllUserBlocks, getAllUserBlocksByReason,
+    getSingleSubscriptionBlocks, getAllSubscriptionBlocks, getAllSubscriptions, checkBlockExists} from "./db-prisma.js";
 import {Block, BlockRecord, FollowerRow, Uri, Did, ExceedsMaxFollowCountResult} from "./types";
 import logger from "./logger.js";
 
@@ -78,7 +83,7 @@ async function syncRepoUserBlockList(agent: BskyAgent, did: Did) {
                             const profile = await agent.getProfile({actor: record.subject})
                             // const profile = await getProfile(agent, record.subject)
 
-                            await insertUserBlock({
+                            await insertSingleUserBlock({
                                 did: record.subject,
                                 handle: profile.data.handle,
                                 rkey: rkey,
@@ -104,7 +109,7 @@ async function syncRepoUserBlockList(agent: BskyAgent, did: Did) {
             if(!repoUserBlocksSet.has(block)) {
                 try {
                     logger.info(`${block}`)
-                    await deleteUserBlock(block)
+                    await deleteSingleUserBlock(block)
                 } catch (error) {
                     logger.error(`Error removing orphan block from local block list. Error: ${error}`)
                 }
@@ -133,7 +138,7 @@ async function syncUserBlockList(agent: BskyAgent) {
 
                 const rkey = await parseKeyFromURI(response.data.uri)
 
-                await insertUserBlock({did: block.did,
+                await insertSingleUserBlock({did: block.did,
                     handle: handle,
                     rkey: rkey,
                     reason: 'subscription',
@@ -151,11 +156,11 @@ async function syncUserBlockList(agent: BskyAgent) {
     if(orphanedUserBlocks.length > 0) {
         for(const block of orphanedUserBlocks) {
             try {
-                const record = await getUserBlock(block.did)
+                const record = await getSingleUserBlock(block.did)
                 const response = await deleteBlock(agent, block.did, record.r_key)
 
                 if (response.status == 200) {
-                    await deleteUserBlock(block.did)
+                    await deleteSingleUserBlock(block.did)
                     blockLogger.info(`Deleted block for ${record.did}`)
                 }
             } catch(error) {
@@ -215,7 +220,7 @@ async function blockSubscriptions(agent: BskyAgent, subscriptionsList: string) {
                         const date_last_updated = new Date().toISOString();
 
                         if (!subscriptionBlocksCurrentSet.has(blockDid)) {
-                            await insertSubscriptionBlock({
+                            await insertSingleSubscriptionBlock({
                                 blocked_did: blockDid,
                                 subscribed_did: subscriptionDid,
                                 date_last_updated
@@ -233,7 +238,7 @@ async function blockSubscriptions(agent: BskyAgent, subscriptionsList: string) {
 
         for (const block of allSubscriptionBlocksCurrent) {
             if(!newSubscriptionDidsSet.has(block.did)) {
-                await deleteSubscriptionBlock(block.did)
+                await deleteSingleSubscriptionBlock(block.did)
                 blockLogger.info(`Removed ${block.did} from subscriptionBlocks as it no longer appears in any subscription lists`)
             }
         }
@@ -242,33 +247,28 @@ async function blockSubscriptions(agent: BskyAgent, subscriptionsList: string) {
     }
 }
 
-async function blockSpam(agent: BskyAgent, db: any, followLimit: string | number): Promise<void> {
+async function blockSpam(userDid: string, agent: BskyAgent, followLimit: string | number): Promise<void> {
 
     try {
         const followers = await getFollowers(agent);
 
-        if(!followers) {
-            throw Error
-        }
+        if(!followers) throw Error
 
         for (const follower of followers) {
-            let followerRow = await getFollower(follower.did)
 
+            let followerRow = await getSingleFollower(follower.did)
             if (!followerRow) {
                 followerRow = {
                     did: follower.did,
                     handle: follower.handle,
-                    following_count: 0,
-                    block_status: 0,
-                    date_last_updated: new Date().toISOString(),
+                    followingCount: 0,
                 } as FollowerRow;
 
-                await insertFollower({did: followerRow.did, handle: followerRow.handle, following_count: followerRow.following_count, block_status: followerRow.block_status, date_last_updated: new Date().toISOString()})
+                await insertSingleFollower(userDid, {did: followerRow.did, handle: followerRow.handle, followingCount: followerRow.followingCount})
             }
 
             const { exceedsMax, followingCount } = await exceedsMaxFollowCount(agent, follower.did, followLimit)
 
-            // @ts-ignore
             if (exceedsMax) {
 
                 blockLogger.info(`Blocking ${follower.handle} who is following ${followingCount} users.`)
@@ -277,22 +277,21 @@ async function blockSpam(agent: BskyAgent, db: any, followLimit: string | number
                 if(!blockExists) {
                     const response = await createBlock(agent, follower.did);
                     const rKey = await parseKeyFromURI(response.data.uri)
-                    await insertUserBlock({
+                    await insertSingleUserBlock(userDid,{
                         did: follower.did,
                         handle: follower.handle,
                         rkey: rKey,
                         reason: 'spam',
-                        date_blocked: new Date().toISOString(),
-                        date_last_updated: new Date().toISOString()
-                    })
+                     },
+                    )
                     blockLogger.info(`Blocked ${follower.handle}.`)
                 } else {
                     blockLogger.info(`${follower.handle} is already in block list. Updating followers table then continuing.`)
                 }
-                await updateFollower({did:follower.did, handle: follower.handle, following_count: followingCount, block_status: 1, date_last_updated: new Date().toISOString()})
+                await updateSingleFollower({did:follower.did, handle: follower.handle, followingCount: followingCount, isBlocked: true}, {did: follower.did})
             } else {
                 blockLogger.info(`Doing nothing with ${follower.handle} who is following ${followingCount} users.`)
-                await updateFollower({did:follower.did, handle: follower.handle, following_count: followingCount, block_status: 0, date_last_updated: new Date().toISOString()})
+                await updateSingleFollower({did:follower.did, handle: follower.handle, followingCount: followingCount, isBlocked: false})
             }
         }
     } catch (error) {

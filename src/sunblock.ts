@@ -4,6 +4,7 @@ import {
     dbPromise,
     createTables,
 } from "./db.js";
+import {createSingleUser, getSingleUser } from "./db-prisma.js";
 import {authenticateBsky} from "./api.js";
 import {blockSpam, blockSubscriptions, syncUserBlockList, syncRepoUserBlockList} from "./blockHandler.js";
 import sqlite3 from "sqlite3";
@@ -19,6 +20,7 @@ if (!res.parsed.ATPROTO_USER || !res.parsed.ATPROTO_PASS) {
     throw new Error('Environment variables ATPROTO_USER and ATPROTO_PASS must be set')
 }
 
+const apiUser = process.env.ATPROTO_USER as string
 const followLimit = process.env.FOLLOW_LIMIT as string
 const subscriptions = process.env.SUBSCRIPTIONS as string
 
@@ -35,24 +37,47 @@ export async function checkAndBlock(): Promise<void> {
         throw Error("Session is missing. Something has gone wrong.")
     }
 
-    const db = await dbPromise;
-    await createTables();
+    const {data: profile} = await agent.getProfile({actor: apiUser})
+
+    if(!(await getSingleUser(apiUser))) {
+        try {
+            await createSingleUser({did: profile.did, handle: apiUser},
+                {
+                    avatar: profile.avatar,
+                    banner: profile.banner,
+                    description: profile.description,
+                    displayName: profile.displayName,
+                    followers: profile.followersCount,
+                    following: profile.followsCount,
+                    labels: profile.labels.join(',')
+                })
+        }
+        catch (error) {
+            logger.error( `Something went wrong instantiating the user: ${error}\n\nQuitting...`)
+            process.exit(1)
+        }
+    }
+
+
+
+    // const db = await dbPromise;
+    // await createTables();
 
     mainLogger.info("Database opened.")
 
     try {
         const user = agent.session.did as Did
-        await blockSpam(agent, db, followLimit)
+        await blockSpam(profile.did, agent, followLimit)
 
-        if (subscriptions) {
-            try {
-                await blockSubscriptions(agent, subscriptions)
-            } catch (error) {
-                mainLogger.error(`Error running blocks subscription: ${error.message}`);
-            }
-        }
-        await syncUserBlockList(agent)
-        await syncRepoUserBlockList(agent, user)
+        // if (subscriptions) {
+        //     try {
+        //         await blockSubscriptions(agent, subscriptions)
+        //     } catch (error) {
+        //         mainLogger.error(`Error running blocks subscription: ${error.message}`);
+        //     }
+        // }
+        // await syncUserBlockList(agent)
+        // await syncRepoUserBlockList(agent, user)
 
     } catch (error) {
         mainLogger.error(`Error running spam blocker: ${error.message}`);

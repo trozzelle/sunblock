@@ -7,39 +7,81 @@ datasource db {
   url      = "file:../db.sqlite"
 }
 
-model Blocks {
-  did               String @id @unique
+model Users {
+  did               String           @id @unique
   handle            String
-  rKey             String
-  reason            String
-  dateBlocked      String
-  dateLastUpdated String
+  blocks            Blocks[]
+  subscriptions     Subscriptions[]
+  followers         Followers[]
+  userPreference    UserPreferences? @relation(fields: [userPreferenceDid], references: [did])
+  userPreferenceDid String?           @unique
+  userMeta          UserMeta?        @relation(fields: [userMetaDid], references: [did])
+  userMetaDid       String?           @unique
+}
 
+model UserPreferences {
+  did               String   @id @unique
+  blockSpam         Boolean
+  blockSubscription Boolean
+  updatedAt         DateTime @updatedAt
+  user              Users?
+}
+
+model UserMeta {
+  did         String @id @unique
+  avatar      String?
+  banner      String?
+  description String?
+  displayName String?
+  followers   Int
+  following   Int
+  labels      String?
+  user        Users?
+}
+
+model Blocks {
+  did       String     @id @unique
+  handle    String
+  rKey      String
+  reason    String
+  blockedAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      Users      @relation(fields: [userDid], references: [did])
+  userDid   String
+  follower  Followers? @relation(fields: [followerDid], references: [follower])
+  followerDid String @unique
 }
 
 model Followers {
-  follower          String @id @unique
-  handle            String
-  followingCount   Int
-  blockStatus      Int
-  dateLastUpdated String
-
+  follower       String   @id @unique
+  handle         String
+  followingCount Int
+  isBlocked      Boolean  @default(false)
+  isMuted        Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+  user           Users    @relation(fields: [userDid], references: [did])
+  block          Blocks?
+  userDid        String
 }
 
 model SubscriptionBlocks {
-  did               String
-  author            String
-  reason            String
-  dateLastUpdated String
+  did                 String
+  author              String
+  blockedAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  Subscriptions       Subscriptions? @relation(fields: [subscriptionsAuthor], references: [author])
+  subscriptionsAuthor String?
 
   @@id([author, did])
 }
 
 model Subscriptions {
-  author            String @id @unique
-  handle            String
-  blockCount       Int
-  dateAdded        String
-  dateLastUpdated String
-
+  author     String               @id @unique
+  handle     String
+  blockCount Int?
+  addedAt    DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  user       Users?               @relation(fields: [userDid], references: [did])
+  userDid    String?
+  blocks     SubscriptionBlocks[]
 }
